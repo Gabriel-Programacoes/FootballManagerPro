@@ -1,103 +1,185 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CalendarDays, Trophy, Coins } from "lucide-react";
+import { useCareer } from "@/contexts/career-context";
+import { formatCompactNumber } from "@/lib/utils";
+import { useMemo } from "react";
+
+export default function Dashboard() {
+  // 3. OBTENDO OS DADOS DO CONTEXTO
+  const { managedClub, playersInClub, managedLeague } = useCareer();
+
+  // 4. CÁLCULOS DINÂMICOS BASEADOS NO CONTEXTO
+  const clubStats = useMemo(() => {
+    if (!playersInClub || playersInClub.length === 0) {
+      return {
+        totalPlayers: 0,
+        averageAge: "0",
+        teamValue: "€ 0",
+        weeklyWages: "€ 0",
+      };
+    }
+
+    const totalPlayers = playersInClub.length;
+    const averageAge = (playersInClub.reduce((sum, player) => sum + player.age, 0) / totalPlayers).toFixed(1);
+    const totalValue = playersInClub.reduce((sum, player) => sum + player.contract.value, 0);
+    const totalWages = playersInClub.reduce((sum, player) => sum + player.contract.wage, 0);
+
+    return {
+      totalPlayers,
+      averageAge,
+      teamValue: `€ ${formatCompactNumber(totalValue)}`,
+      weeklyWages: `€ ${formatCompactNumber(totalWages)}`,
+    };
+  }, [playersInClub]);
+
+
+  // Dados estáticos que podem ser movidos para o contexto no futuro
+  const careerData = {
+    reputation: "Continental",
+    position: "3º",
+    points: 65,
+    budget: "€45 mi",
+    morale: "Alto",
+  };
+
+  const nextMatch = { opponent: "Blue Lions FC", date: "30/07/2025", time: "16:00" }
+  const seasonSummary = { championsLeague: "Oitavas de Final", nationalCup: "Quartas de Final" }
+
+  // Se os dados do clube ainda não foram carregados, exibe uma mensagem
+  if (!managedClub || !managedLeague) {
+    return <div>Carregando informações da carreira...</div>;
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Centro de Comando</h1>
+            <p className="text-muted-foreground">Visão geral do seu clube</p>
+          </div>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Coins className="h-5 w-5 text-yellow-500" />
+              <span className="font-bold text-lg">{careerData.budget}</span>
+            </div>
+          </div>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
-    </div>
-  );
+
+        {/* Cards de Status do Clube */}
+        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          {/* Card de Posição na Liga */}
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-lg">{managedLeague.name}</CardTitle></CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-blue-500">{careerData.position}</div>
+              <div className="text-sm text-muted-foreground">{careerData.points} pontos</div>
+            </CardContent>
+          </Card>
+          {/* Card de Orçamento */}
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-lg">Orçamento</CardTitle></CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-green-500">{careerData.budget}</div>
+              <div className="text-sm text-muted-foreground">Para transferências</div>
+            </CardContent>
+          </Card>
+          {/* Card de Moral */}
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-lg">Moral do Time</CardTitle></CardHeader>
+            <CardContent>
+              <div className="text-3xl font-bold text-purple-500">{careerData.morale}</div>
+              <div className="text-sm text-muted-foreground">Confiança</div>
+            </CardContent>
+          </Card>
+          {/* Card de Reputação */}
+          <Card>
+            <CardHeader className="pb-3"><CardTitle className="text-lg">Reputação</CardTitle></CardHeader>
+            <CardContent>
+              <Badge variant="secondary" className="px-3 py-1 text-base">{careerData.reputation}</Badge>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Próxima Partida e Competições */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5" />Próxima Partida</CardTitle></CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-semibold text-lg">{nextMatch.opponent}</p>
+                  <p className="text-sm text-muted-foreground">{managedLeague.name}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-medium">{nextMatch.date}</p>
+                  <p className="text-sm text-muted-foreground">{nextMatch.time}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Trophy className="h-5 w-5" />Resumo das Competições</CardTitle></CardHeader>
+            <CardContent>
+              <div className="flex justify-around">
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Liga</p>
+                  <p className="font-semibold">{careerData.position}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Continental</p>
+                  <p className="font-semibold">{seasonSummary.championsLeague}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-sm text-muted-foreground">Copa</p>
+                  <p className="font-semibold">{seasonSummary.nationalCup}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* --- SEÇÃO DE ESTATÍSTICAS COM DADOS DINÂMICOS --- */}
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Jogadores</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{clubStats.totalPlayers}</div>
+              <div className="text-sm text-muted-foreground">No elenco</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Idade Média</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{clubStats.averageAge}</div>
+              <div className="text-sm text-muted-foreground">Anos</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Valor do Elenco</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-500">{clubStats.teamValue}</div>
+              <div className="text-sm text-muted-foreground">Valor de mercado</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg">Salários</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-red-500">{clubStats.weeklyWages}</div>
+              <div className="text-sm text-muted-foreground">Por semana</div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+  )
 }
