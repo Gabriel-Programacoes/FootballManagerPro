@@ -1,13 +1,36 @@
+// app/team-select/page.tsx
+
 "use client";
 
-import { useState, useMemo } from "react";
+// Importamos useEffect e mais alguns tipos que serão úteis.
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trophy, Search, Users, ArrowLeft, ChevronRight, Award } from "lucide-react";
+import { Trophy, Search, Users, ArrowLeft, ChevronRight, Award, Loader2 } from "lucide-react"; // Importamos um ícone de Loading
 import { useCareer } from "@/contexts/career-context";
-import {Club, countries} from "@/data/club-data";
-import {ClubDetailModal} from "@/components/club-detail-modal";
+import { ClubDetailModal } from "@/components/club-detail-modal";
+
+// --- NOVAS INTERFACES ---
+// Definimos a "forma" dos dados que esperamos receber da nossa API.
+// Isso ajuda o TypeScript a entender a estrutura dos nossos dados.
+export interface Country {
+    name: string;
+    leagues: League[];
+    clubCount: number;
+}
+export interface League {
+    name: string;
+    clubs: Club[];
+}
+export interface Club {
+    id: string;
+    name: string;
+    leagueName: string;
+    playerCount: number;
+}
+// --- FIM DAS NOVAS INTERFACES ---
+
 
 type Step = "country" | "league" | "club";
 
@@ -17,14 +40,38 @@ export default function SelectTeamPage() {
     const [selectedCountryName, setSelectedCountryName] = useState<string | null>(null);
     const [selectedLeagueName, setSelectedLeagueName] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState("");
-
     const [modalClub, setModalClub] = useState<Club | null>(null);
 
-    // A LÓGICA AGORA USA DIRETAMENTE a constante 'countries' importada.
-    const countriesData = useMemo(() => {
-        // Apenas filtramos a lista importada para remover a Argentina.
-        return countries.filter(country => country.name !== 'Argentina');
-    }, []);
+    // --- LÓGICA DE BUSCA DE DADOS (DATA FETCHING) ---
+    const [countriesData, setCountriesData] = useState<Country[]>([]);
+    const [isLoading, setIsLoading] = useState(true); // Estado para controlar o loading
+    const [error, setError] = useState<string | null>(null); // Estado para armazenar erros
+
+    useEffect(() => {
+        // Esta função será executada assim que o componente for montado no navegador.
+        async function fetchCountries() {
+            try {
+                // Faz a requisição para a nossa nova API.
+                const response = await fetch('/api/countries');
+                if (!response.ok) {
+                    throw new Error('Falha ao buscar os dados do servidor.');
+                }
+                const data: Country[] = await response.json();
+
+                // Filtramos a Argentina aqui, como era feito antes.
+                setCountriesData(data.filter(country => country.name !== 'Argentina'));
+
+            } catch (err: any) {
+                setError(err.message); // Armazena a mensagem de erro.
+                console.error(err);
+            } finally {
+                setIsLoading(false); // Para de carregar, independentemente de sucesso ou erro.
+            }
+        }
+
+        fetchCountries();
+    }, []); // O array vazio [] garante que esta função execute apenas uma vez.
+    // --- FIM DA LÓGICA DE BUSCA DE DADOS ---
 
 
     const handleGoBack = () => {
@@ -48,6 +95,28 @@ export default function SelectTeamPage() {
         );
     }, [selectedLeagueData, searchTerm]);
 
+    // --- RENDERIZAÇÃO CONDICIONAL ---
+    // Mostra mensagens de loading ou erro enquanto os dados não estão prontos.
+    if (isLoading) {
+        return (
+            <div className="flex min-h-screen flex-col items-center justify-center gap-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-muted-foreground">Carregando banco de dados...</p>
+            </div>
+        );
+    }
+    if (error) {
+        return (
+            <div className="flex min-h-screen flex-col items-center justify-center gap-4 text-center">
+                <h2 className="text-2xl font-bold text-destructive">Ocorreu um Erro</h2>
+                <p className="text-muted-foreground">{error}</p>
+                <p>Verifique o console do terminal (onde você rodou `npm run dev`) para mais detalhes.</p>
+            </div>
+        );
+    }
+    // --- FIM DA RENDERIZAÇÃO CONDICIONAL ---
+
+
     return (
         <>
             <div className="min-h-screen bg-background text-foreground">
@@ -56,11 +125,9 @@ export default function SelectTeamPage() {
                         <Trophy className="mx-auto h-10 w-10 text-primary"/>
                         <h1 className="text-4xl font-bold">Inicie sua Carreira</h1>
                         <div className="flex items-center justify-center space-x-2 text-sm text-muted-foreground">
-                            <span
-                                className={currentStep === "country" ? "font-semibold text-primary" : ""}>1. Região</span>
+                            <span className={currentStep === "country" ? "font-semibold text-primary" : ""}>1. Região</span>
                             <ChevronRight className="h-4 w-4"/>
-                            <span
-                                className={currentStep === "league" ? "font-semibold text-primary" : ""}>2. Liga</span>
+                            <span className={currentStep === "league" ? "font-semibold text-primary" : ""}>2. Liga</span>
                             <ChevronRight className="h-4 w-4"/>
                             <span className={currentStep === "club" ? "font-semibold text-primary" : ""}>3. Clube</span>
                         </div>
@@ -138,7 +205,6 @@ export default function SelectTeamPage() {
                             </div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {filteredClubs.map((club) => (
-                                    // 3. ONCLICK AGORA ABRE O MODAL
                                     <Card key={club.id} className="cursor-pointer hover:bg-accent transition-colors" onClick={() => setModalClub(club)}>
                                         <CardContent className="p-4 flex items-center justify-between">
                                             <div className="flex items-center gap-4">
@@ -147,7 +213,8 @@ export default function SelectTeamPage() {
                                                 </div>
                                                 <div>
                                                     <h3 className="font-bold">{club.name}</h3>
-                                                    <p className="text-sm text-muted-foreground">{club.playerIds.length} jogadores</p>
+                                                    {/* Agora usamos playerCount que vem da API */}
+                                                    <p className="text-sm text-muted-foreground">{club.playerCount} jogadores</p>
                                                 </div>
                                             </div>
                                             <Button size="sm" variant="outline">Ver Detalhes</Button>
@@ -159,11 +226,13 @@ export default function SelectTeamPage() {
                     )}
                 </div>
             </div>
+            {/* O Modal continua funcionando, mas agora precisa ser ajustado para os novos dados */}
             <ClubDetailModal
                 club={modalClub}
                 isOpen={!!modalClub}
                 onOpenChange={(isOpen) => !isOpen && setModalClub(null)}
-                onConfirm={selectManagedClub}/>
+                onConfirm={selectManagedClub}
+            />
         </>
     );
 }

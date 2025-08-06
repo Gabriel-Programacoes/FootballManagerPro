@@ -1,6 +1,7 @@
 "use client";
 
-import { Player } from "@/data/player-data";
+// A interface 'Player' agora vem da página de elenco, que já a define corretamente.
+import { Player } from "@/app/squad/page";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,7 @@ import {
     DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useState, useEffect } from "react";
+import { useCareer } from "@/contexts/career-context"; // Importamos para pegar o nome do clube
 
 interface PlayerDetailModalProps {
     player: Player | null;
@@ -55,14 +57,15 @@ const AttributeBar = ({ name, value }: { name: string; value: number | null }) =
 };
 
 export function PlayerDetailModal({ player, isOpen, onOpenChange }: PlayerDetailModalProps) {
+    const { managedClub } = useCareer(); // Pegamos o clube gerenciado do contexto
     const [blockProposals, setBlockProposals] = useState(false);
     const [isEditingNumber, setIsEditingNumber] = useState(false);
-    const [jerseyNumber, setJerseyNumber] = useState("9"); // Valor inicial de exemplo
+    const [jerseyNumber, setJerseyNumber] = useState("");
 
     useEffect(() => {
         if (player) {
-            // Lógica para obter o número da camisa real (pode vir dos dados no futuro)
-            setJerseyNumber(String(Math.floor(Math.random() * 98) + 1));
+            // Agora usamos o número da camisa real que vem do banco de dados!
+            setJerseyNumber(String(player.jerseyNumber || "")); // Usa o número ou uma string vazia se for nulo
             setIsEditingNumber(false);
         }
     }, [player]);
@@ -124,14 +127,15 @@ export function PlayerDetailModal({ player, isOpen, onOpenChange }: PlayerDetail
                     <div className="md:col-span-1 space-y-4">
                         <div className="flex items-center justify-center h-40 w-40 rounded-full bg-muted mx-auto"><span className="text-6xl font-bold">{player.overall}</span></div>
                         <div className="space-y-2 text-sm text-center">
-                            <p>Equipa: <span className="font-semibold">{player.attributes.profile.team}</span></p>
+                            {/* Usamos o nome do clube do contexto para garantir que está correto */}
+                            <p>Equipa: <span className="font-semibold">{managedClub?.name}</span></p>
                         </div>
                         <div className="border-t pt-3">
                             <div className="flex justify-between items-center text-sm">
                                 <span className="font-medium">Nº da Camisa</span>
                                 {!isEditingNumber ? (
                                     <div className="flex items-center gap-2">
-                                        <span className="font-bold text-lg">{jerseyNumber}</span>
+                                        <span className="font-bold text-lg">{jerseyNumber || "-"}</span>
                                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsEditingNumber(true)}>
                                             <Pencil className="h-4 w-4" />
                                         </Button>
@@ -161,7 +165,7 @@ export function PlayerDetailModal({ player, isOpen, onOpenChange }: PlayerDetail
                         </div>
                     </div>
 
-                    {/* --- Coluna Direita: Atributos --- */}
+                    {/* --- Coluna Direita: Atributos (Permanece igual) --- */}
                     <div className="md:col-span-2 space-y-4">
                         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                             <div>

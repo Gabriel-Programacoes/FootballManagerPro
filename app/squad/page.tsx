@@ -1,17 +1,44 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, List, LayoutGrid, Star, UserCheck, UserCog, Gem, Shield } from "lucide-react";
-import { Player } from "@/data/player-data";
+import { Search, List, LayoutGrid, Star, UserCheck, UserCog, Gem, Shield, Loader2 } from "lucide-react";
 import { formatCompactNumber } from "@/lib/utils";
 import { PlayerDetailModal } from "@/components/player-detail-modal";
 import { useCareer } from "@/contexts/career-context";
+
+// --- NOVA INTERFACE DO JOGADOR ---
+// Esta interface agora corresponde à estrutura que nossa API retorna.
+export interface Player {
+    id: string;
+    name: string;
+    age: number;
+    jerseyNumber: number;
+    position: "GOL" | "LE" | "ZAG" | "LD" | "VOL" | "ME" | "MD" | "MC" | "MAT" | "PE" | "PD" | "SA" | "ATA";
+    overall: number;
+    contract: {
+        value: number;
+        wage: number;
+        ends: string;
+    };
+    attributes: {
+        pace: { acceleration: number; sprintSpeed: number; };
+        shooting: { finishing: number; penalties: number; };
+        passing: { crossing: number; freeKickAccuracy: number; shortPassing: number; longPassing: number; };
+        dribbling: { dribbling: number; };
+        defending: { defAwareness: number; standingTackle: number; slidingTackle: number; };
+        physical: { stamina: number; strength: number; aggression: number; };
+        goalkeeping: { gkPositioning: number | null; gkReflexes: number | null; };
+        mentality: { weakFoot: number; preferredFoot: string; };
+        profile: { height: string; weight: string; nation: string; league: string; team: string; };
+    };
+}
+
 
 // --- FUNÇÕES HELPER ---
 type PositionDetails = {
@@ -48,13 +75,42 @@ const getPlayerStatus = (overall: number) => {
 
 // --- COMPONENTE ---
 export default function SquadPage() {
-    const { managedClub, playersInClub } = useCareer();
+    const { managedClub } = useCareer();
+
+    const [playersInClub, setPlayersInClub] = useState<Player[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
 
     const [searchTerm, setSearchTerm] = useState("");
     const [positionFilter, setPositionFilter] = useState("all");
     const [sortOption, setSortOption] = useState("overall_desc");
     const [layout, setLayout] = useState<"grid" | "list">("grid");
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
+
+    useEffect(() => {
+        if (managedClub?.id) {
+            const fetchSquad = async () => {
+                setIsLoading(true);
+                setError(null);
+                try {
+                    const response = await fetch(`/api/squad/${managedClub.id}`);
+                    if (!response.ok) {
+                        throw new Error('Falha ao buscar o elenco.');
+                    }
+                    const data = await response.json();
+                    setPlayersInClub(data);
+                } catch (err: any) {
+                    setError(err.message);
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+            fetchSquad();
+        } else {
+            setIsLoading(false);
+        }
+    }, [managedClub]);
+
 
     const filteredAndSortedPlayers = useMemo(() => {
         if (!playersInClub) return [];
@@ -87,8 +143,31 @@ export default function SquadPage() {
         setSelectedPlayer(player);
     };
 
-    if (!managedClub) {
-        return <div>Carregando informações do clube... Ou selecione um clube para começar.</div>
+    if (!managedClub && !isLoading) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <p className="text-muted-foreground">Selecione um clube para começar sua carreira.</p>
+            </div>
+        );
+    }
+
+    if (isLoading) {
+        return (
+            <div className="flex h-full w-full items-center justify-center">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="flex h-full w-full items-center justify-center text-center text-destructive">
+                <div>
+                    <h3 className="font-bold">Erro ao carregar elenco</h3>
+                    <p className="text-sm">{error}</p>
+                </div>
+            </div>
+        );
     }
 
     return (
@@ -96,7 +175,7 @@ export default function SquadPage() {
             <div className="space-y-6">
                 <div className="flex flex-col gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold">Elenco - {managedClub.name}</h1>
+                        <h1 className="text-3xl font-bold">Elenco - {managedClub?.name}</h1>
                         <p className="text-muted-foreground">Gerencie os {playersInClub.length} jogadores do seu time.</p>
                     </div>
                     <div className="flex flex-col gap-2 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
