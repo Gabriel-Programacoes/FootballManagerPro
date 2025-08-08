@@ -8,11 +8,8 @@ import path from 'path';
 let db: Database | null = null;
 
 // A função GET agora recebe 'request' e 'context' para acessar os parâmetros da URL
-export async function GET(
-    request: NextRequest,
-    { params }: { params: { clubId: string } }
-) {
-    const clubId = params.clubId; // Pega o ID do clube da URL
+export async function GET(request: NextRequest) {
+    const clubId = request.nextUrl.pathname.split('/').pop();
 
     if (!clubId) {
         return NextResponse.json({ message: 'ID do clube não fornecido.' }, { status: 400 });

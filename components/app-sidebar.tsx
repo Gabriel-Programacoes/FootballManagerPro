@@ -31,9 +31,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import Link from "next/link"
 
 const menuItems = [
-    { title: "Centro de Comando", url: "/", icon: Home },
+    { title: "Centro de Comando", url: "/dashboard", icon: Home },
     { title: "Elenco", url: "/squad", icon: Users },
-    { title: "Transferências", url: "/transfers", icon: ArrowLeftRight },
+    { title: "Central de Transferências", url: "/transfers", icon: ArrowLeftRight },
     { title: "Academia", url: "/youth", icon: GraduationCap },
     { title: "Temporadas", url: "/seasons", icon: Calendar },
     { title: "Troféus", url: "/trophies", icon: Trophy },

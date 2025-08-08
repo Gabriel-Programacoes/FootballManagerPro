@@ -35,7 +35,7 @@ export interface Club {
 type Step = "country" | "league" | "club";
 
 export default function SelectTeamPage() {
-    const { selectManagedClub } = useCareer();
+    const { startNewCareer } = useCareer();
     const [currentStep, setCurrentStep] = useState<Step>("country");
     const [selectedCountryName, setSelectedCountryName] = useState<string | null>(null);
     const [selectedLeagueName, setSelectedLeagueName] = useState<string | null>(null);
@@ -231,7 +231,7 @@ export default function SelectTeamPage() {
                 club={modalClub}
                 isOpen={!!modalClub}
                 onOpenChange={(isOpen) => !isOpen && setModalClub(null)}
-                onConfirm={selectManagedClub}
+                onConfirm={startNewCareer}
             />
         </>
     );

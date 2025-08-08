@@ -40,7 +40,7 @@ interface ClubDetailModalProps {
     club: Club | null;
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
-    onConfirm: (clubId: string) => void;
+    onConfirm: (club: Club) => void;
 }
 
 export function ClubDetailModal({ club, isOpen, onOpenChange, onConfirm }: ClubDetailModalProps) {
@@ -71,10 +71,9 @@ export function ClubDetailModal({ club, isOpen, onOpenChange, onConfirm }: ClubD
         }
     }, [isOpen, club, onOpenChange]);
 
-
     const handleConfirm = () => {
         if (club) {
-            onConfirm(club.id);
+            onConfirm(club);
         }
     };
 

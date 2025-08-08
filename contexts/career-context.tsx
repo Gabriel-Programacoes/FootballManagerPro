@@ -5,6 +5,7 @@
 import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Club, League, Country } from '@/app/team-select/page';
+import {MatchResult, NewsItem, SeasonObjective} from "@/lib/game-data";
 
 // Estrutura de um "save" de carreira
 interface CareerSave {
@@ -80,6 +81,10 @@ export function CareerProvider({ children }: { children: ReactNode }) {
             saveName,
             clubId: club.id,
             clubName: club.name,
+            currentSeason: '',
+            results: [],
+            news: [],
+            objectives: []
         };
         const updatedCareers = [...careers, newCareer];
         const newIndex = updatedCareers.length - 1;
@@ -154,4 +159,15 @@ export function useCareer() {
         throw new Error('useCareer deve ser usado dentro de um CareerProvider');
     }
     return context;
+}
+
+interface CareerSave {
+    saveName: string;
+    clubId: string;
+    clubName: string;
+    // Novos dados do save:
+    currentSeason: string;
+    results: MatchResult[];
+    news: NewsItem[];
+    objectives: SeasonObjective[];
 }

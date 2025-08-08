@@ -31,7 +31,7 @@ export function CareerGuard({ children }: { children: React.ReactNode }) {
     const router = useRouter();
     const pathname = usePathname();
 
-    const isPublicPage = pathname === '/' || pathname === '/team-select';
+    const isPublicPage = pathname === '/' || pathname === '/team-select' || pathname === '/career-menu';
 
     useEffect(() => {
         // Se a carreira não foi carregada, não há carreira e a página não é pública, redireciona.

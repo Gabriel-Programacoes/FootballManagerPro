@@ -18,14 +18,13 @@ const defaultDetails = {
     challenges: '["Surpreender os grandes e se estabelecer na liga."]'
 };
 
-export async function GET(
-    request: NextRequest,
-    { params }: { params: { clubId: string } }
-) {
-    const clubId = params.clubId;
+// --- A CORREÇÃO DEFINITIVA ESTÁ AQUI ---
+export async function GET(request: NextRequest) {
+    // Extraímos o ID do clube diretamente da URL, ignorando o 'context'
+    const clubId = request.nextUrl.pathname.split('/').pop();
 
     if (!clubId) {
-        return NextResponse.json({ message: 'ID do clube não fornecido.' }, { status: 400 });
+        return NextResponse.json({ message: 'ID do clube não fornecido na URL.' }, { status: 400 });
     }
 
     try {
@@ -38,26 +37,22 @@ export async function GET(
             });
         }
 
-        // 1. Busca os detalhes do clube
         let details = await db.get('SELECT * FROM club_details WHERE club_id = ?', clubId);
         if (!details) {
-            details = defaultDetails; // Usa o perfil padrão se não encontrar detalhes específicos
+            details = defaultDetails;
         }
 
-        // 2. Busca os 3 melhores jogadores
         const keyPlayers = await db.all(
             'SELECT name, position, overall FROM players WHERE club_id = ? ORDER BY overall DESC LIMIT 3',
             clubId
         );
 
-        // 3. Calcula o valor total do elenco para o orçamento
         const squadValue = await db.get(
             'SELECT SUM(value) as totalValue FROM players WHERE club_id = ?',
             clubId
         );
         const transferBudget = (squadValue?.totalValue || 0) * 0.30;
 
-        // 4. Combina tudo em uma única resposta
         const responseData = {
             details: {
                 reputation: details.reputation,
@@ -67,7 +62,6 @@ export async function GET(
                     cup: details.objectives_cup,
                     continental: details.objectives_continental
                 },
-                // JSON.parse para transformar as strings de volta em arrays
                 strengths: JSON.parse(details.strengths || '[]'),
                 weaknesses: JSON.parse(details.weaknesses || '[]'),
                 challenges: JSON.parse(details.challenges || '[]')
