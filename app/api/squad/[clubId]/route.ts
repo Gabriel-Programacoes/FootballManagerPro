@@ -7,7 +7,6 @@ import path from 'path';
 
 let db: Database | null = null;
 
-// A função GET agora recebe 'request' e 'context' para acessar os parâmetros da URL
 export async function GET(request: NextRequest) {
     const clubId = request.nextUrl.pathname.split('/').pop();
 
@@ -18,43 +17,38 @@ export async function GET(request: NextRequest) {
     try {
         if (!db) {
             const dbPath = path.join(process.cwd(), 'master_data.db');
-            db = await open({
-                filename: dbPath,
-                driver: sqlite3.Database,
-                mode: sqlite3.OPEN_READONLY
-            });
+            db = await open({ filename: dbPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READONLY });
         }
 
-        // Busca todos os jogadores que pertencem ao club_id fornecido
-        const players = await db.all('SELECT * FROM players WHERE club_id = ?', [clubId]);
+        const players = await db.all('SELECT * FROM players WHERE club_team_id = ?', [clubId]);
 
-        if (!players) {
-            return NextResponse.json({ message: 'Nenhum jogador encontrado para este clube.' }, { status: 404 });
+        if (!players || players.length === 0) {
+            return NextResponse.json([], { status: 200 }); // Retorna um array vazio se não houver jogadores
         }
 
-        // O banco de dados armazena tudo achatado. Precisamos reestruturar para o formato que o front-end espera.
+        // Mapeamento cuidadoso dos dados do DB para a interface do frontend
         const formattedPlayers = players.map(p => ({
-            id: p.id,
-            name: p.name,
+            id: p.player_id,
+            name: p.short_name,
             age: p.age,
-            jerseyNumber: p.jerseyNumber,
-            position: p.position,
+            jerseyNumber: p.club_jersey_number,
+            position: p.player_positions.split(',')[0], // Pega a primeira posição como principal
             overall: p.overall,
             contract: {
-                value: p.value,
-                wage: p.wage,
-                ends: p.contract_ends
+                value: p.value_eur,
+                wage: p.wage_eur,
+                ends: p.club_contract_valid_until_year
             },
-            attributes: { // Reconstruindo o objeto de atributos
-                pace: { acceleration: p.pace_acceleration, sprintSpeed: p.pace_sprintSpeed },
-                shooting: { finishing: p.shooting_finishing, penalties: p.shooting_penalties },
-                passing: { crossing: p.passing_crossing, freeKickAccuracy: p.passing_freeKickAccuracy, shortPassing: p.passing_shortPassing, longPassing: p.passing_longPassing },
-                dribbling: { dribbling: p.dribbling_dribbling },
-                defending: { defAwareness: p.defending_defAwareness, standingTackle: p.defending_standingTackle, slidingTackle: p.defending_slidingTackle },
-                physical: { stamina: p.physical_stamina, strength: p.physical_strength, aggression: p.physical_aggression },
-                goalkeeping: { gkPositioning: p.goalkeeping_gkPositioning, gkReflexes: p.goalkeeping_gkReflexes },
-                mentality: { weakFoot: p.mentality_weakFoot, preferredFoot: p.mentality_preferredFoot },
-                profile: { height: p.profile_height, weight: p.profile_weight, nation: p.profile_nation, league: '', team: '' } // league e team podem ser preenchidos se necessário
+            attributes: {
+                pace: { acceleration: p.movement_acceleration, sprintSpeed: p.movement_sprint_speed },
+                shooting: { finishing: p.attacking_finishing, penalties: p.mentality_penalties },
+                passing: { crossing: p.passing, shortPassing: p.attacking_short_passing, longPassing: p.skill_long_passing, freeKickAccuracy: p.skill_fk_accuracy },
+                dribbling: { dribbling: p.skill_dribbling },
+                defending: { defAwareness: p.defending_marking_awareness, standingTackle: p.defending_standing_tackle, slidingTackle: p.defending_sliding_tackle },
+                physical: { stamina: p.power_stamina, strength: p.power_strength, aggression: p.physic },
+                goalkeeping: { gkPositioning: p.goalkeeping_positioning, gkReflexes: p.goalkeeping_reflexes, gkDiving: p.goalkeeping_diving },
+                mentality: { weakFoot: p.weak_foot, preferredFoot: p.preferred_foot },
+                profile: { height: `${p.height_cm}cm`, weight: `${p.weight_kg}kg`, nation: p.nationality_name, league: '', team: '' }
             }
         }));
 

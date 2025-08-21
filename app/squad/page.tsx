@@ -7,20 +7,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Search, List, LayoutGrid, Star, UserCheck, UserCog, Gem, Shield, Loader2 } from "lucide-react";
-import { formatCompactNumber } from "@/lib/utils";
+import { Search, List, LayoutGrid, Star, UserCheck, UserCog, Gem, Shield, Loader2, DollarSign } from "lucide-react";
+import { formatCompactNumber, translatePosition, getPositionDetails } from "@/lib/utils";
 import { PlayerDetailModal } from "@/components/player-detail-modal";
 import { useCareer } from "@/contexts/career-context";
 
-// --- NOVA INTERFACE DO JOGADOR ---
-// Esta interface agora corresponde à estrutura que nossa API retorna.
 export interface Player {
     id: string;
     name: string;
     age: number;
     jerseyNumber: number;
-    position: "GOL" | "LE" | "ZAG" | "LD" | "VOL" | "ME" | "MD" | "MC" | "MAT" | "PE" | "PD" | "SA" | "ATA";
+    position: string;
     overall: number;
+    potential: number;
     contract: {
         value: number;
         wage: number;
@@ -33,37 +32,15 @@ export interface Player {
         dribbling: { dribbling: number; };
         defending: { defAwareness: number; standingTackle: number; slidingTackle: number; };
         physical: { stamina: number; strength: number; aggression: number; };
-        goalkeeping: { gkPositioning: number | null; gkReflexes: number | null; };
+        goalkeeping: {
+            gkDiving: number | null;
+            gkPositioning: number | null;
+            gkReflexes: number | null;
+        };
         mentality: { weakFoot: number; preferredFoot: string; };
         profile: { height: string; weight: string; nation: string; league: string; team: string; };
     };
 }
-
-
-// --- FUNÇÕES HELPER ---
-type PositionDetails = {
-    group: 'GOL' | 'DEF' | 'MEIO' | 'ATA';
-    color: string;
-};
-
-const getPositionDetails = (position: Player['position']): PositionDetails => {
-    switch (position) {
-        case "GOL":
-            return { group: 'GOL', color: "bg-yellow-500 hover:bg-yellow-600 text-black" };
-        case "LE":
-        case "ZAG":
-        case "LD":
-            return { group: 'DEF', color: "bg-blue-500 hover:bg-blue-600" };
-        case "VOL":
-        case "ME":
-        case "MD":
-        case "MC":
-        case "MAT":
-            return { group: 'MEIO', color: "bg-green-500 hover:bg-green-600" };
-        default:
-            return { group: 'ATA', color: "bg-red-500 hover:bg-red-600" };
-    }
-};
 
 const getPlayerStatus = (overall: number) => {
     if (overall >= 85) return { text: "Estrela", icon: <Star className="h-4 w-4 text-yellow-400" />, variant: "default" as const };
@@ -75,12 +52,10 @@ const getPlayerStatus = (overall: number) => {
 
 // --- COMPONENTE ---
 export default function SquadPage() {
-    const { managedClub } = useCareer();
-
+    const { managedClub, activeCareer, isLoading: isCareerLoading } = useCareer();
     const [playersInClub, setPlayersInClub] = useState<Player[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
+    const [isLoadingData, setIsLoadingData] = useState(true);
     const [error, setError] = useState<string | null>(null);
-
     const [searchTerm, setSearchTerm] = useState("");
     const [positionFilter, setPositionFilter] = useState("all");
     const [sortOption, setSortOption] = useState("overall_desc");
@@ -88,86 +63,62 @@ export default function SquadPage() {
     const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null);
 
     useEffect(() => {
-        if (managedClub?.id) {
+        if (!isCareerLoading && managedClub?.id) {
             const fetchSquad = async () => {
-                setIsLoading(true);
+                setIsLoadingData(true);
                 setError(null);
                 try {
                     const response = await fetch(`/api/squad/${managedClub.id}`);
-                    if (!response.ok) {
-                        throw new Error('Falha ao buscar o elenco.');
-                    }
+                    if (!response.ok) throw new Error('Falha ao buscar o elenco.');
                     const data = await response.json();
                     setPlayersInClub(data);
                 } catch (err: any) {
                     setError(err.message);
                 } finally {
-                    setIsLoading(false);
+                    setIsLoadingData(false);
                 }
             };
             fetchSquad();
-        } else {
-            setIsLoading(false);
+        } else if (!isCareerLoading) {
+            setIsLoadingData(false);
         }
-    }, [managedClub]);
-
+    }, [managedClub, isCareerLoading]);
 
     const filteredAndSortedPlayers = useMemo(() => {
         if (!playersInClub) return [];
 
-        const players = [...playersInClub]
-            .filter((player) =>
-                player.name.toLowerCase().includes(searchTerm.toLowerCase())
-            )
-            .filter((player) => {
+        return playersInClub
+            .map(player => ({
+                ...player,
+                translatedPosition: translatePosition(player.position),
+                isListed: activeCareer?.transferList.some(p => p.playerId === player.id) ?? false,
+            }))
+            .filter(player => player.name.toLowerCase().includes(searchTerm.toLowerCase()))
+            .filter(player => {
                 if (positionFilter === "all") return true;
-                return getPositionDetails(player.position).group === positionFilter;
+                return getPositionDetails(player.translatedPosition).group === positionFilter;
+            })
+            .sort((a, b) => {
+                switch (sortOption) {
+                    case "overall_desc": return b.overall - a.overall;
+                    case "overall_asc": return a.overall - b.overall;
+                    case "age_asc": return a.age - b.age;
+                    case "age_desc": return b.age - a.age;
+                    case "value_desc": return b.contract.value - a.contract.value;
+                    case "name_asc": return a.name.localeCompare(b.name);
+                    default: return 0;
+                }
             });
+    }, [playersInClub, searchTerm, positionFilter, sortOption, activeCareer]);
 
-        players.sort((a, b) => {
-            switch (sortOption) {
-                case "overall_desc": return b.overall - a.overall;
-                case "overall_asc": return a.overall - b.overall;
-                case "age_asc": return a.age - b.age;
-                case "age_desc": return b.age - a.age;
-                case "value_desc": return b.contract.value - a.contract.value;
-                case "name_asc": return a.name.localeCompare(b.name);
-                default: return 0;
-            }
-        });
+    const handlePlayerClick = (player: Player) => setSelectedPlayer(player);
 
-        return players;
-    }, [playersInClub, searchTerm, positionFilter, sortOption]);
-
-    const handlePlayerClick = (player: Player) => {
-        setSelectedPlayer(player);
-    };
-
-    if (!managedClub && !isLoading) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <p className="text-muted-foreground">Selecione um clube para começar sua carreira.</p>
-            </div>
-        );
-    }
-
-    if (isLoading) {
-        return (
-            <div className="flex h-full w-full items-center justify-center">
-                <Loader2 className="h-12 w-12 animate-spin text-primary" />
-            </div>
-        );
+    if (isCareerLoading || isLoadingData) {
+        return <div className="flex h-full w-full items-center justify-center"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
     }
 
     if (error) {
-        return (
-            <div className="flex h-full w-full items-center justify-center text-center text-destructive">
-                <div>
-                    <h3 className="font-bold">Erro ao carregar elenco</h3>
-                    <p className="text-sm">{error}</p>
-                </div>
-            </div>
-        );
+        return <div className="text-center text-red-500">Erro: {error}</div>;
     }
 
     return (
@@ -178,6 +129,8 @@ export default function SquadPage() {
                         <h1 className="text-3xl font-bold">Elenco - {managedClub?.name}</h1>
                         <p className="text-muted-foreground">Gerencie os {playersInClub.length} jogadores do seu time.</p>
                     </div>
+
+                    {/* --- BARRA DE FILTROS REINSERIDA --- */}
                     <div className="flex flex-col gap-2 rounded-lg border bg-card p-4 sm:flex-row sm:items-center sm:justify-between">
                         <div className="flex flex-1 items-center gap-2">
                             <div className="relative w-full flex-1 md:grow-0">
@@ -232,16 +185,23 @@ export default function SquadPage() {
                 {layout === 'grid' ? (
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {filteredAndSortedPlayers.map((player) => {
-                            const positionDetails = getPositionDetails(player.position);
+                            const positionDetails = getPositionDetails(player.translatedPosition);
                             return (
                                 <Card key={player.id} className="flex cursor-pointer flex-col transition-all hover:shadow-lg hover:border-primary/50" onClick={() => handlePlayerClick(player)}>
                                     <CardHeader>
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1 pr-2">
-                                                <CardTitle className="text-xl truncate">{player.name}</CardTitle>
+                                                <CardTitle className="text-xl truncate flex items-center gap-2">
+                                                    {player.name}
+                                                    {player.isListed && (
+                                                        <span title="Listado para Transferência">
+                                                            <DollarSign className="h-4 w-4 text-green-500" />
+                                                        </span>
+                                                    )}
+                                                </CardTitle>
                                                 <p className="text-sm text-muted-foreground">Idade: {player.age}</p>
                                             </div>
-                                            <Badge className={positionDetails.color}>{player.position}</Badge>
+                                            <Badge className={positionDetails.color}>{player.translatedPosition}</Badge>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="flex-grow space-y-4">
@@ -250,14 +210,8 @@ export default function SquadPage() {
                                             <span className="font-bold text-3xl leading-none">{player.overall}</span>
                                         </div>
                                         <div className="text-xs text-muted-foreground space-y-1 pt-2 border-t">
-                                            <div className="flex justify-between">
-                                                <span>Valor:</span>
-                                                <span className="font-mono">€ {formatCompactNumber(player.contract.value)}</span>
-                                            </div>
-                                            <div className="flex justify-between">
-                                                <span>Salário/sem:</span>
-                                                <span className="font-mono">€ {formatCompactNumber(player.contract.wage)}</span>
-                                            </div>
+                                            <div className="flex justify-between"><span>Valor:</span><span className="font-mono">€ {formatCompactNumber(player.contract.value)}</span></div>
+                                            <div className="flex justify-between"><span>Salário/sem:</span><span className="font-mono">€ {formatCompactNumber(player.contract.wage)}</span></div>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -279,14 +233,21 @@ export default function SquadPage() {
                             </TableHeader>
                             <TableBody>
                                 {filteredAndSortedPlayers.map((player) => {
-                                    const positionDetails = getPositionDetails(player.position);
+                                    const positionDetails = getPositionDetails(player.translatedPosition);
                                     const playerStatus = getPlayerStatus(player.overall);
                                     return (
-                                        <TableRow key={player.id} className="cursor-pointer hover:bg-muted" onClick={() => handlePlayerClick(player)}>
-                                            <TableCell className="font-medium">{player.name}</TableCell>
-                                            <TableCell>
-                                                <Badge className={positionDetails.color}>{player.position}</Badge>
+                                        <TableRow key={player.id} onClick={() => handlePlayerClick(player)} className="cursor-pointer hover:bg-muted">
+                                            <TableCell className="font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    {player.name}
+                                                    {player.isListed && (
+                                                        <span title="Listado para Transferência">
+                                                            <DollarSign className="h-4 w-4 text-green-500" />
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </TableCell>
+                                            <TableCell><Badge className={positionDetails.color}>{player.translatedPosition}</Badge></TableCell>
                                             <TableCell>{player.age}</TableCell>
                                             <TableCell className="font-semibold">{player.overall}</TableCell>
                                             <TableCell>
@@ -295,9 +256,7 @@ export default function SquadPage() {
                                                     {playerStatus.text}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="text-right font-mono">
-                                                € {formatCompactNumber(player.contract.value)}
-                                            </TableCell>
+                                            <TableCell className="text-right font-mono">€ {formatCompactNumber(player.contract.value)}</TableCell>
                                         </TableRow>
                                     );
                                 })}
@@ -310,11 +269,7 @@ export default function SquadPage() {
             <PlayerDetailModal
                 player={selectedPlayer}
                 isOpen={!!selectedPlayer}
-                onOpenChange={(isOpen) => {
-                    if (!isOpen) {
-                        setSelectedPlayer(null);
-                    }
-                }}
+                onOpenChange={(isOpen) => !isOpen && setSelectedPlayer(null)}
             />
         </>
     );

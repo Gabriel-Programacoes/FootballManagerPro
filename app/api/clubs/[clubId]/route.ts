@@ -7,52 +7,43 @@ import path from 'path';
 
 let db: Database | null = null;
 
-const defaultDetails = {
-    reputation: 'Nacional',
-    difficulty: 'Médio',
-    objectives_league: 'Terminar no meio da tabela',
-    objectives_cup: 'Fazer uma boa campanha',
-    objectives_continental: null,
-    strengths: '["Jogo Coletivo"]',
-    weaknesses: '["Orçamento Limitado"]',
-    challenges: '["Surpreender os grandes e se estabelecer na liga."]'
-};
-
-// --- A CORREÇÃO DEFINITIVA ESTÁ AQUI ---
 export async function GET(request: NextRequest) {
-    // Extraímos o ID do clube diretamente da URL, ignorando o 'context'
     const clubId = request.nextUrl.pathname.split('/').pop();
 
     if (!clubId) {
-        return NextResponse.json({ message: 'ID do clube não fornecido na URL.' }, { status: 400 });
+        return NextResponse.json({ message: 'ID do clube não fornecido.' }, { status: 400 });
     }
 
     try {
         if (!db) {
             const dbPath = path.join(process.cwd(), 'master_data.db');
-            db = await open({
-                filename: dbPath,
-                driver: sqlite3.Database,
-                mode: sqlite3.OPEN_READONLY
-            });
+            db = await open({ filename: dbPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READONLY });
         }
 
-        let details = await db.get('SELECT * FROM club_details WHERE club_id = ?', clubId);
+        // Consulta que une as tabelas 'clubs' e 'club_details'
+        const details = await db.get(`
+            SELECT * FROM club_details
+            WHERE club_id = ?
+        `, clubId);
+
+        // Se não houver detalhes, retorna um erro amigável
         if (!details) {
-            details = defaultDetails;
+            return NextResponse.json({ message: 'Detalhes para este clube não encontrados.' }, { status: 404 });
         }
 
-        const keyPlayers = await db.all(
-            'SELECT name, position, overall FROM players WHERE club_id = ? ORDER BY overall DESC LIMIT 3',
-            clubId
-        );
+        // Busca os 3 melhores jogadores do clube
+        const keyPlayers = await db.all(`
+            SELECT short_name as name, player_positions as position, overall FROM players
+            WHERE club_team_id = ? ORDER BY overall DESC LIMIT 3
+        `, clubId);
 
+        // Calcula o orçamento de transferência (ex: 30% do valor total do elenco)
         const squadValue = await db.get(
-            'SELECT SUM(value) as totalValue FROM players WHERE club_id = ?',
-            clubId
+            'SELECT SUM(value_eur) as totalValue FROM players WHERE club_team_id = ?', clubId
         );
         const transferBudget = (squadValue?.totalValue || 0) * 0.30;
 
+        // Monta o objeto de resposta no formato esperado pelo frontend
         const responseData = {
             details: {
                 reputation: details.reputation,
@@ -66,7 +57,7 @@ export async function GET(request: NextRequest) {
                 weaknesses: JSON.parse(details.weaknesses || '[]'),
                 challenges: JSON.parse(details.challenges || '[]')
             },
-            keyPlayers,
+            keyPlayers: keyPlayers.map(p => ({...p, position: p.position.split(',')[0]})),
             transferBudget
         };
 
