@@ -5,36 +5,62 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Target, UserPlus, Star } from "lucide-react";
+import { UserPlus, Star } from "lucide-react";
 import { formatCompactNumber, translatePosition } from "@/lib/utils";
 import { Player } from "@/app/squad/page";
+import { useCareer } from "@/contexts/career-context";
+import { cn } from "@/lib/utils"; // Importamos o utilitário `cn` para classes condicionais
 
 interface PlayerTransferDetailModalProps {
     player: Player | null;
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
+    onNegotiationStart: () => void;
 }
 
-// Função auxiliar para extrair e classificar os melhores atributos de um jogador
+// ATUALIZADO: A função agora deteta se o jogador é goleiro
 const getTopAttributes = (player: Player) => {
-    const allAttributes = [
-        { name: "Aceleração", value: player.attributes.pace.acceleration },
-        { name: "Velocidade", value: player.attributes.pace.sprintSpeed },
-        { name: "Finalização", value: player.attributes.shooting.finishing },
-        { name: "Passe Curto", value: player.attributes.passing.shortPassing },
-        { name: "Drible", value: player.attributes.dribbling.dribbling },
-        { name: "Corte em Pé", value: player.attributes.defending.standingTackle },
-        { name: "Fôlego", value: player.attributes.physical.stamina },
-        { name: "Força", value: player.attributes.physical.strength },
-    ];
-    // Ordena os atributos do maior para o menor
-    allAttributes.sort((a, b) => (b.value || 0) - (a.value || 0));
-    // Retorna os 5 melhores
-    return allAttributes.slice(0, 5);
+    let allAttributes = [];
+    const isGk = player.position.toUpperCase() === 'GK';
+
+    if (isGk) {
+        allAttributes = [
+            { name: "Elasticidade (GOL)", value: player.attributes.goalkeeping.gkDiving },
+            { name: "Reflexos (GOL)", value: player.attributes.goalkeeping.gkReflexes },
+            { name: "Posicionamento (GOL)", value: player.attributes.goalkeeping.gkPositioning },
+            { name: "Velocidade", value: player.attributes.pace.sprintSpeed },
+            { name: "Força", value: player.attributes.physical.strength },
+        ];
+    } else {
+        allAttributes = [
+            { name: "Aceleração", value: player.attributes.pace.acceleration },
+            { name: "Velocidade", value: player.attributes.pace.sprintSpeed },
+            { name: "Finalização", value: player.attributes.shooting.finishing },
+            { name: "Passe Curto", value: player.attributes.passing.shortPassing },
+            { name: "Drible", value: player.attributes.dribbling.dribbling },
+            { name: "Corte em Pé", value: player.attributes.defending.standingTackle },
+            { name: "Fôlego", value: player.attributes.physical.stamina },
+            { name: "Força", value: player.attributes.physical.strength },
+        ];
+    }
+
+    // Filtra atributos nulos ou inválidos e ordena do maior para o menor
+    return allAttributes
+        .filter(attr => attr.value !== null && attr.value > 0)
+        .sort((a, b) => (b.value || 0) - (a.value || 0))
+        .slice(0, 5); // Retorna os 5 melhores
 };
 
-export function PlayerTransferDetailModal({ player, isOpen, onOpenChange }: PlayerTransferDetailModalProps) {
+export function PlayerTransferDetailModal({ player, isOpen, onOpenChange, onNegotiationStart }: PlayerTransferDetailModalProps) {
+    const { startNegotiation } = useCareer();
+
     if (!player) return null;
+
+    const handleMakeOffer = () => {
+        startNegotiation(player, player.contract.value);
+        onOpenChange(false);
+        onNegotiationStart();
+    };
 
     const topAttributes = getTopAttributes(player);
 
@@ -70,7 +96,6 @@ export function PlayerTransferDetailModal({ player, isOpen, onOpenChange }: Play
                             </div>
                             <div className="flex justify-between">
                                 <span>Potencial:</span>
-                                {/* 'potential' precisa ser adicionado ao seu tipo Player e à API */}
                                 <span className="font-medium">{player.potential || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between">
@@ -86,7 +111,7 @@ export function PlayerTransferDetailModal({ player, isOpen, onOpenChange }: Play
 
                     {/* Coluna da Direita: Melhores Atributos */}
                     <div className="space-y-4">
-                        <h4 className="font-semibold">Melhores Atributos</h4>
+                        <h4 className="font-semibold">{player.position.toUpperCase() === 'GK' ? 'Atributos de Goleiro' : 'Melhores Atributos'}</h4>
                         <div className="space-y-2">
                             {topAttributes.map(attr => (
                                 <div key={attr.name} className="text-sm">
@@ -94,7 +119,15 @@ export function PlayerTransferDetailModal({ player, isOpen, onOpenChange }: Play
                                         <span>{attr.name}</span>
                                         <span className="font-semibold">{attr.value}</span>
                                     </div>
-                                    <Progress value={attr.value || 0} className="h-2" />
+                                    <Progress
+                                        value={attr.value || 0}
+                                        className="h-2"
+                                        indicatorClassName={cn(
+                                            attr.value && attr.value >= 85 && "bg-green-500",
+                                            attr.value && attr.value >= 70 && attr.value < 85 && "bg-yellow-500",
+                                            attr.value && attr.value < 70 && "bg-red-500",
+                                        )}
+                                    />
                                 </div>
                             ))}
                         </div>
@@ -102,8 +135,10 @@ export function PlayerTransferDetailModal({ player, isOpen, onOpenChange }: Play
                 </div>
 
                 <DialogFooter>
-                    <Button variant="outline"><Target className="h-4 w-4 mr-2" />Observar Jogador</Button>
-                    <Button><UserPlus className="h-4 w-4 mr-2" />Fazer Proposta</Button>
+                    <Button onClick={handleMakeOffer}>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                        Fazer Proposta
+                    </Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>

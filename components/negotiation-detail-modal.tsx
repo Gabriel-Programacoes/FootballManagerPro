@@ -1,67 +1,140 @@
+// components/negotiation-detail-modal.tsx
+
 "use client";
 
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Label } from "@/components/ui/label";
-
-// Definimos a "forma" da negociação que este modal espera
-interface Negotiation {
-    player: string;
-    club: string;
-    offer: string;
-    status: string;
-    progress: number;
-    deadline: string;
-    lastUpdate: string;
-}
+import { Button } from "./ui/button";
+import { Handshake, Check, X } from "lucide-react";
+import { Negotiation } from "@/lib/game-data"; // Importa o tipo correto
+import { useCareer } from "@/contexts/career-context";
+import { useState } from "react";
+import { AdjustOfferModal } from "./adjust-offer-modal";
+import { formatCompactNumber } from "@/lib/utils";
+import { DollarSign, Repeat, Percent } from "lucide-react"
 
 interface NegotiationDetailModalProps {
-    negotiation: Negotiation | null;
+    negotiation: Negotiation | null; // Usa o tipo importado
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
+
 }
 
 export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: NegotiationDetailModalProps) {
+
+    const { cancelNegotiation, acceptCounterOffer, squad, updateNegotiation, acceptAiOffer, rejectAiOffer } = useCareer();
+    const [isAdjustingOffer, setIsAdjustingOffer] = useState(false);
+
     if (!negotiation) return null;
 
-    return (
-        <Dialog open={isOpen} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg">
-                <DialogHeader>
-                    <div className="flex items-center gap-4">
-                        <Avatar className="h-16 w-16">
-                            <AvatarFallback className="text-xl">
-                                {negotiation.player.split(" ").map((n) => n[0]).join("")}
-                            </AvatarFallback>
-                        </Avatar>
-                        <div>
-                            <DialogTitle className="text-2xl">Detalhes da Negociação</DialogTitle>
-                            <DialogDescription>Proposta por {negotiation.player} ({negotiation.club})</DialogDescription>
-                        </div>
-                    </div>
-                </DialogHeader>
+    const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
+    const isCounterOffer = negotiation.status === 'Negociar';
 
-                <div className="space-y-4 py-4">
-                    <div className="p-4 bg-muted/50 rounded-lg space-y-2">
-                        <div className="flex justify-between text-sm"><span>Oferta Atual:</span><span className="font-bold text-green-500">{negotiation.offer}</span></div>
-                        <div className="flex justify-between text-sm"><span>Status:</span><Badge variant="secondary">{negotiation.status}</Badge></div>
-                        <div className="flex justify-between text-sm"><span>Prazo Final:</span><span className="font-medium">{negotiation.deadline}</span></div>
-                    </div>
-                    <div>
-                        {/* O <Label> agora funcionará corretamente */}
-                        <Label htmlFor="progress">Progresso da Negociação ({negotiation.progress}%)</Label>
-                        <Progress value={negotiation.progress} className="h-2 mt-1" id="progress" />
-                    </div>
-                    <div>
-                        <h4 className="font-semibold mb-2">Histórico de Ofertas</h4>
-                        <div className="border rounded-lg p-3 text-sm text-center text-muted-foreground">
-                            <p>O histórico de propostas aparecerá aqui.</p>
+    return (
+        <>
+            <Dialog open={isOpen} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <div className="flex items-center gap-4">
+                            <Avatar className="h-16 w-16">
+                                <AvatarFallback className="text-xl">
+                                    {negotiation.playerName.split(" ").map((n) => n[0]).join("")}
+                                </AvatarFallback>
+                            </Avatar>
+                            <div>
+                                <DialogTitle className="text-2xl">Detalhes da Negociação</DialogTitle>
+                                <DialogDescription>Proposta por {negotiation.playerName} ({negotiation.sellingClub.name})</DialogDescription>
+                            </div>
+                        </div>
+                    </DialogHeader>
+
+                    <div className="space-y-4 py-4">
+                        <div className="p-4 bg-muted/50 rounded-lg space-y-2">
+                            <div className="flex justify-between text-sm"><span>Status:</span><Badge variant={isCounterOffer ? "default" : "secondary"}>{negotiation.status}</Badge></div>
+                            <div className="flex justify-between text-sm"><span>Prazo Final:</span><span className="font-medium">{new Date(negotiation.deadline).toLocaleDateString()}</span></div>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold mb-2">Histórico da Negociação</h4>
+                            <div className="border rounded-lg p-3 text-sm space-y-3 max-h-48 overflow-y-auto">
+                                {negotiation.offerHistory.map((offer, index) => {
+                                    const swapPlayer = squad.find(p => p.id === offer.swapPlayerId);
+                                    return (
+                                        <div key={index}>
+                                            <p className="font-semibold mb-1.5 border-b pb-1">{index % 2 === 0 ? "Sua Oferta" : "Contra-Proposta do Clube"}</p>
+                                            <div className="space-y-1 text-muted-foreground">
+                                                <div className="flex items-center gap-2">
+                                                    <DollarSign className="h-4 w-4 text-green-500" />
+                                                    <span>Valor: <span className="font-mono text-foreground">€ {formatCompactNumber(offer.value)}</span></span>
+                                                </div>
+                                                {swapPlayer && (
+                                                    <div className="flex items-center gap-2">
+                                                        <Repeat className="h-4 w-4 text-blue-500" />
+                                                        <span>Troca: <span className="font-semibold text-foreground">{swapPlayer.name}</span></span>
+                                                    </div>
+                                                )}
+                                                {offer.sellOnClause && offer.sellOnClause > 0 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <Percent className="h-4 w-4 text-purple-500" />
+                                                        <span>Cláusula de Revenda: <span className="font-semibold text-foreground">{offer.sellOnClause}%</span></span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )})}
+                            </div>
                         </div>
                     </div>
-                </div>
-            </DialogContent>
-        </Dialog>
+                    <DialogFooter className="sm:justify-between">
+                        {/* Mostra botões diferentes dependendo de quem iniciou a negociação */}
+                        {negotiation.initiatedBy === 'user' ? (
+                            <>
+                                <Button variant="destructive" onClick={() => {cancelNegotiation(negotiation.id); onOpenChange(false);}}>
+                                    <X className="h-4 w-4 mr-2" />
+                                    Retirar Proposta
+                                </Button>
+                                <div className="flex gap-2">
+                                    {isCounterOffer && (
+                                        <Button variant="secondary" onClick={() => {acceptCounterOffer(negotiation.id); onOpenChange(false);}}>
+                                            <Check className="h-4 w-4 mr-2" />
+                                            Aceitar
+                                        </Button>
+                                    )}
+                                    <Button onClick={() => setIsAdjustingOffer(true)}>
+                                        <Handshake className="h-4 w-4 mr-2" />
+                                        {isCounterOffer ? "Fazer Nova Oferta" : "Ajustar Oferta"}
+                                    </Button>
+                                </div>
+                            </>
+                        ) : (
+                            <div className="flex w-full justify-end gap-2">
+                                <Button variant="destructive" onClick={() => {rejectAiOffer(negotiation.id); onOpenChange(false);}}>
+                                    <X className="h-4 w-4 mr-2" />
+                                    Rejeitar
+                                </Button>
+                                <Button variant="secondary" onClick={() => { /* Lógica para contraproposta futura */ }}>
+                                    <Handshake className="h-4 w-4 mr-2" />
+                                    Negociar
+                                </Button>
+                                <Button onClick={() => {acceptAiOffer(negotiation.id); onOpenChange(false);}}>
+                                    <Check className="h-4 w-4 mr-2" />
+                                    Aceitar Proposta
+                                </Button>
+                            </div>
+                        )}
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+            <AdjustOfferModal
+                negotiation={negotiation}
+                squad={squad} // Passa o seu plantel
+                isOpen={isAdjustingOffer}
+                onOpenChange={setIsAdjustingOffer}
+                onConfirm={(offer) => {
+                    updateNegotiation(negotiation.id, offer);
+                    setIsAdjustingOffer(false);
+                }}
+            />
+        </>
     );
 }

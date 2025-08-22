@@ -1,14 +1,12 @@
-// app/api/market/route.ts
-
 import { NextRequest, NextResponse } from 'next/server';
 import sqlite3 from 'sqlite3';
 import { open, Database } from 'sqlite';
 import path from 'path';
-import { Player } from '@/app/squad/page'; // Importa a interface Player
+import { Player } from '@/app/squad/page';
 
 let db: Database | null = null;
 
-// Função auxiliar para formatar os dados do jogador (evita repetição de código)
+// Função auxiliar para formatar os dados do jogador
 const formatDbPlayer = (p: any): Player => ({
     id: p.player_id,
     name: p.short_name,
@@ -16,7 +14,7 @@ const formatDbPlayer = (p: any): Player => ({
     jerseyNumber: p.club_jersey_number,
     position: p.player_positions.split(',')[0].trim(),
     overall: p.overall,
-    potential: p.potential, // Adicionando o potencial
+    potential: p.potential,
     contract: {
         value: p.value_eur,
         wage: p.wage_eur,
@@ -31,14 +29,20 @@ const formatDbPlayer = (p: any): Player => ({
         physical: { stamina: p.power_stamina, strength: p.power_strength, aggression: p.physic },
         goalkeeping: { gkPositioning: p.goalkeeping_positioning, gkReflexes: p.goalkeeping_reflexes, gkDiving: p.goalkeeping_diving },
         mentality: { weakFoot: p.weak_foot, preferredFoot: p.preferred_foot },
-        profile: { height: `${p.height_cm}cm`, weight: `${p.weight_kg}kg`, nation: p.nationality_name, league: '', team: p.club_name }
+        profile: { height: `${p.height_cm}cm`, weight: `${p.weight_kg}kg`, nation: p.nationality_name, league: p.leagueName, team: p.club_name }
     }
 });
 
 export async function GET(request: NextRequest) {
-    // Obtém o ID do clube do utilizador a partir dos parâmetros da URL para o excluir da busca
     const { searchParams } = new URL(request.url);
+    // Parâmetros existentes
     const excludeClubId = searchParams.get('excludeClubId');
+    const freeAgentsOnly = searchParams.get('freeAgentsOnly') === 'true';
+    const limit = searchParams.get('limit');
+    const minPotential = searchParams.get('minPotential');
+    const country = searchParams.get('country');
+    const leagueName = searchParams.get('leagueName');
+    const position = searchParams.get('position');
 
     if (!excludeClubId) {
         return NextResponse.json({ message: 'ID do clube a ser excluído não fornecido.' }, { status: 400 });
@@ -50,14 +54,47 @@ export async function GET(request: NextRequest) {
             db = await open({ filename: dbPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READONLY });
         }
 
-        const players = await db.all(`
-            SELECT p.*, c.club_name
+        // Base da query
+        let query = `
+            SELECT p.*, c.club_name, c.league_name as leagueName, c.countryName
             FROM players p
                      LEFT JOIN clubs c ON p.club_team_id = c.club_team_id
-            WHERE p.club_team_id != ? AND p.value_eur = 0
-        `, [excludeClubId]);
+            WHERE p.club_team_id != ?
+        `;
+        const params: any[] = [excludeClubId];
 
-        const formattedPlayers = players.map(formatDbPlayer);
+
+
+        // Adiciona filtros dinamicamente
+        if (freeAgentsOnly) {
+            query += ' AND p.value_eur = 0';
+        } else {
+            query += ' AND p.value_eur > 0';
+        }
+        if (minPotential) {
+            query += ' AND p.potential >= ?';
+            params.push(minPotential);
+        }
+        if (country) {
+            query += ' AND c.countryName = ?';
+            params.push(country);
+        }
+        if (leagueName) {
+            query += ' AND c.league_name = ?';
+            params.push(leagueName);
+        }
+        if (position) {
+            query += ' AND p.player_positions LIKE ?';
+            params.push(`%${position}%`);
+        }
+
+        if (limit) {
+            query += ` ORDER BY RANDOM() LIMIT ?`;
+            params.push(limit);
+        }
+
+        const players = await db.all(query, params);
+        const formattedPlayers = players.map(p => ({...formatDbPlayer(p)}));
 
         return NextResponse.json(formattedPlayers);
 
