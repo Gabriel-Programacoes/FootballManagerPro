@@ -20,8 +20,12 @@ export async function GET(request: NextRequest) {
             db = await open({ filename: dbPath, driver: sqlite3.Database, mode: sqlite3.OPEN_READONLY });
         }
 
-        const players = await db.all('SELECT * FROM players WHERE club_team_id = ?', [clubId]);
-
+        const players = await db.all(`
+            SELECT p.*, c.club_name 
+            FROM players p
+            LEFT JOIN clubs c ON p.club_team_id = c.club_team_id
+            WHERE p.club_team_id = ?
+        `, [clubId]);
         if (!players || players.length === 0) {
             return NextResponse.json([], { status: 200 }); // Retorna um array vazio se não houver jogadores
         }
@@ -34,6 +38,7 @@ export async function GET(request: NextRequest) {
             jerseyNumber: p.club_jersey_number,
             position: p.player_positions.split(',')[0], // Pega a primeira posição como principal
             overall: p.overall,
+            potential: p.potential,
             contract: {
                 value: p.value_eur,
                 wage: p.wage_eur,

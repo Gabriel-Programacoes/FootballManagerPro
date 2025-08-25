@@ -66,9 +66,8 @@ export interface Offer {
     swapPlayerId?: string;
     sellOnClause?: number;
     date: string;
-    offeredBy: "user" | "ai";
+    offeredBy: 'user' | 'ai';
 }
-
 
 export interface Negotiation {
     id: string;
@@ -80,7 +79,7 @@ export interface Negotiation {
     aiClub: {
         id: string;
         name: string;
-    }
+    };
     status: 'Enviada' | 'Recebida' | 'Aceite' | 'Rejeitada' | 'Contraproposta';
     offerHistory: Offer[];
     deadline: string;

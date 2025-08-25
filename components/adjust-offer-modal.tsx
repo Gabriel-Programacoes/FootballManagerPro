@@ -19,7 +19,7 @@ interface AdjustOfferModalProps {
     squad: Player[];
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
-    onConfirm: (offer: Omit<Offer, 'date'>) => void;
+    onConfirm: (offer: Omit<Offer, 'date' | 'offeredBy'>) => void;
 }
 
 export function AdjustOfferModal({ negotiation, squad, isOpen, onOpenChange, onConfirm }: AdjustOfferModalProps) {

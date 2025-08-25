@@ -7,31 +7,43 @@ import { Player } from '@/app/squad/page';
 let db: Database | null = null;
 
 // Função auxiliar para formatar os dados do jogador
-const formatDbPlayer = (p: any): Player => ({
-    id: p.player_id,
-    name: p.short_name,
-    age: p.age,
-    jerseyNumber: p.club_jersey_number,
-    position: p.player_positions.split(',')[0].trim(),
-    overall: p.overall,
-    potential: p.potential,
-    contract: {
-        value: p.value_eur,
-        wage: p.wage_eur,
-        ends: p.club_contract_valid_until_year
-    },
-    attributes: {
-        pace: { acceleration: p.movement_acceleration, sprintSpeed: p.movement_sprint_speed },
-        shooting: { finishing: p.attacking_finishing, penalties: p.mentality_penalties },
-        passing: { crossing: p.passing, freeKickAccuracy: p.skill_fk_accuracy, shortPassing: p.attacking_short_passing, longPassing: p.skill_long_passing },
-        dribbling: { dribbling: p.skill_dribbling },
-        defending: { defAwareness: p.defending_marking_awareness, standingTackle: p.defending_standing_tackle, slidingTackle: p.defending_sliding_tackle },
-        physical: { stamina: p.power_stamina, strength: p.power_strength, aggression: p.physic },
-        goalkeeping: { gkPositioning: p.goalkeeping_positioning, gkReflexes: p.goalkeeping_reflexes, gkDiving: p.goalkeeping_diving },
-        mentality: { weakFoot: p.weak_foot, preferredFoot: p.preferred_foot },
-        profile: { height: `${p.height_cm}cm`, weight: `${p.weight_kg}kg`, nation: p.nationality_name, league: p.leagueName, team: p.club_name }
+const formatDbPlayer = (p: any, isFreeAgent = false): Player => {
+    // Se for um agente livre, simulamos os dados do "clube" e do contrato
+    if (isFreeAgent) {
+        // Gera um valor de mercado e salário baseados no overall e potencial
+        const baseValue = (p.overall * 5000) + (p.potential * 2500);
+        p.value_eur = Math.round((baseValue * (1 + (Math.random() * 0.2))) / 1000) * 1000; // Adiciona variação
+        p.wage_eur = Math.round((p.value_eur / 100 * (1 + (Math.random() * 0.5))) / 100) * 100;
+        p.club_name = "Agentes Livres FC"; // O nosso clube virtual
+        p.club_jersey_number = Math.floor(Math.random() * 98) + 1; // Número de camisola aleatório
     }
-});
+
+    return {
+        id: p.player_id,
+        name: p.short_name,
+        age: p.age,
+        jerseyNumber: p.club_jersey_number,
+        position: p.player_positions.split(',')[0].trim(),
+        overall: p.overall,
+        potential: p.potential,
+        contract: {
+            value: p.value_eur,
+            wage: p.wage_eur,
+            ends: p.club_contract_valid_until_year
+        },
+        attributes: {
+            pace: { acceleration: p.movement_acceleration, sprintSpeed: p.movement_sprint_speed },
+            shooting: { finishing: p.attacking_finishing, penalties: p.mentality_penalties },
+            passing: { crossing: p.passing, freeKickAccuracy: p.skill_fk_accuracy, shortPassing: p.attacking_short_passing, longPassing: p.skill_long_passing },
+            dribbling: { dribbling: p.skill_dribbling },
+            defending: { defAwareness: p.defending_marking_awareness, standingTackle: p.defending_standing_tackle, slidingTackle: p.defending_sliding_tackle },
+            physical: { stamina: p.power_stamina, strength: p.power_strength, aggression: p.physic },
+            goalkeeping: { gkPositioning: p.goalkeeping_positioning, gkReflexes: p.goalkeeping_reflexes, gkDiving: p.goalkeeping_diving },
+            mentality: { weakFoot: p.weak_foot, preferredFoot: p.preferred_foot },
+            profile: { height: `${p.height_cm}cm`, weight: `${p.weight_kg}kg`, nation: p.nationality_name, league: p.leagueName, team: p.club_name }
+        }
+    };
+};
 
 export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);

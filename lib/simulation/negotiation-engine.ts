@@ -64,7 +64,7 @@ export function processNegotiation(negotiation: Negotiation, player: Player): Ne
     if (lastOffer >= counterOfferValue) {
         return {
             status: 'Aceite',
-            reason: `Após negociação, a proposta por ${player.name} foi aceite.`
+            reason: `Após negociação, a proposta por ${player.name} foi aceita.`
         };
     }
 

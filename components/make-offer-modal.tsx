@@ -19,7 +19,7 @@ interface MakeOfferModalProps {
     squad: Player[]; // O seu plantel para oferecer jogadores em troca
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
-    onConfirm: (offer: Omit<Offer, 'date'>) => void;
+    onConfirm: (offer: Omit<Offer, 'date' | 'offeredBy'>) => void;
 }
 
 export function MakeOfferModal({ player, squad, isOpen, onOpenChange, onConfirm }: MakeOfferModalProps) {

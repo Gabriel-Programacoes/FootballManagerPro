@@ -9,7 +9,7 @@ import { UserPlus, Star } from "lucide-react";
 import { formatCompactNumber, translatePosition } from "@/lib/utils";
 import { Player } from "@/app/squad/page";
 import { useCareer } from "@/contexts/career-context";
-import { cn } from "@/lib/utils"; // Importamos o utilitário `cn` para classes condicionais
+import { cn } from "@/lib/utils";
 
 interface PlayerTransferDetailModalProps {
     player: Player | null;
@@ -18,7 +18,6 @@ interface PlayerTransferDetailModalProps {
     onNegotiationStart: () => void;
 }
 
-// ATUALIZADO: A função agora deteta se o jogador é goleiro
 const getTopAttributes = (player: Player) => {
     let allAttributes = [];
     const isGk = player.position.toUpperCase() === 'GK';
@@ -57,9 +56,12 @@ export function PlayerTransferDetailModal({ player, isOpen, onOpenChange, onNego
     if (!player) return null;
 
     const handleMakeOffer = () => {
-        startNegotiation(player, player.contract.value);
-        onOpenChange(false);
-        onNegotiationStart();
+        const initialOffer = {
+            value: player.contract.value,
+        };
+        startNegotiation(player, initialOffer);
+        onOpenChange(false); // Fecha o modal de detalhes
+        onNegotiationStart(); // Avisa a página para mudar para o separador de negociações
     };
 
     const topAttributes = getTopAttributes(player);

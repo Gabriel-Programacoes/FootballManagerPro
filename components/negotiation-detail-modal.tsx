@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "./ui/button";
 import { Handshake, Check, X } from "lucide-react";
-import { Negotiation } from "@/lib/game-data"; // Importa o tipo correto
+import { Negotiation } from "@/lib/game-data";
 import { useCareer } from "@/contexts/career-context";
 import { useState } from "react";
 import { AdjustOfferModal } from "./adjust-offer-modal";
@@ -22,14 +22,12 @@ interface NegotiationDetailModalProps {
 }
 
 export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: NegotiationDetailModalProps) {
-
-    const { cancelNegotiation, acceptCounterOffer, squad, updateNegotiation, acceptAiOffer, rejectAiOffer } = useCareer();
+    const { cancelNegotiation, squad, updateNegotiation, acceptAiOffer, rejectAiOffer, negotiateAiOffer } = useCareer();
     const [isAdjustingOffer, setIsAdjustingOffer] = useState(false);
 
     if (!negotiation) return null;
 
-    const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
-    const isCounterOffer = negotiation.status === 'Negociar';
+    const isCounterOffer = negotiation.status === 'Contraproposta';
 
     return (
         <>
@@ -44,7 +42,7 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
                             </Avatar>
                             <div>
                                 <DialogTitle className="text-2xl">Detalhes da Negociação</DialogTitle>
-                                <DialogDescription>Proposta por {negotiation.playerName} ({negotiation.sellingClub.name})</DialogDescription>
+                                <DialogDescription>Proposta por {negotiation.playerName} ({negotiation.aiClub.name})</DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
@@ -85,7 +83,7 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
                             </div>
                         </div>
                     </div>
-                    <DialogFooter className="sm:justify-between">
+                    <DialogFooter className="sm:justify-between pt-4">
                         {/* Mostra botões diferentes dependendo de quem iniciou a negociação */}
                         {negotiation.initiatedBy === 'user' ? (
                             <>
@@ -95,9 +93,17 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
                                 </Button>
                                 <div className="flex gap-2">
                                     {isCounterOffer && (
-                                        <Button variant="secondary" onClick={() => {acceptCounterOffer(negotiation.id); onOpenChange(false);}}>
+                                        <Button variant="secondary" onClick={() => {
+                                            const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
+                                            updateNegotiation(negotiation.id, {
+                                                value: lastOffer.value,
+                                                swapPlayerId: lastOffer.swapPlayerId,
+                                                sellOnClause: lastOffer.sellOnClause
+                                            });
+                                            onOpenChange(false);
+                                        }}>
                                             <Check className="h-4 w-4 mr-2" />
-                                            Aceitar
+                                            Aceitar Contraproposta
                                         </Button>
                                     )}
                                     <Button onClick={() => setIsAdjustingOffer(true)}>
@@ -112,9 +118,9 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
                                     <X className="h-4 w-4 mr-2" />
                                     Rejeitar
                                 </Button>
-                                <Button variant="secondary" onClick={() => { /* Lógica para contraproposta futura */ }}>
+                                <Button variant="secondary" onClick={() => setIsAdjustingOffer(true)}>
                                     <Handshake className="h-4 w-4 mr-2" />
-                                    Negociar
+                                    Fazer Contraproposta
                                 </Button>
                                 <Button onClick={() => {acceptAiOffer(negotiation.id); onOpenChange(false);}}>
                                     <Check className="h-4 w-4 mr-2" />
@@ -127,11 +133,15 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
             </Dialog>
             <AdjustOfferModal
                 negotiation={negotiation}
-                squad={squad} // Passa o seu plantel
+                squad={squad}
                 isOpen={isAdjustingOffer}
                 onOpenChange={setIsAdjustingOffer}
                 onConfirm={(offer) => {
-                    updateNegotiation(negotiation.id, offer);
+                    if (negotiation.initiatedBy === 'user') {
+                        updateNegotiation(negotiation.id, offer);
+                    } else {
+                        negotiateAiOffer(negotiation.id, offer);
+                    }
                     setIsAdjustingOffer(false);
                 }}
             />

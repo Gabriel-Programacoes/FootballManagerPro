@@ -110,7 +110,7 @@ export default function TransfersPage() {
         position: "any",
     });
 
-    const handleStartNegotiation = (offer: Omit<Offer, 'date'>) => {
+    const handleStartNegotiation = (offer: Omit<Offer, 'date' | 'offeredBy'>) => {
         if (!playerToNegotiate) return;
         startNegotiation(playerToNegotiate, offer);
         setActiveTab('negotiations');
@@ -481,7 +481,7 @@ export default function TransfersPage() {
                                                             </Avatar>
                                                             <div>
                                                                 <p className="font-bold">{neg.playerName}</p>
-                                                                <p className="text-sm text-muted-foreground">de {neg.sellingClub.name}</p>
+                                                                <p className="text-sm text-muted-foreground">de {neg.aiClub.name}</p>
                                                             </div>
                                                         </div>
 
@@ -507,7 +507,7 @@ export default function TransfersPage() {
 
                                                         {/* Coluna 3: Status */}
                                                         <div className="text-left sm:text-right">
-                                                            <Badge variant={neg.status === 'A Negociar' ? 'default' : 'secondary'}>{neg.status}</Badge>
+                                                            <Badge variant={neg.status === 'Contraproposta' ? 'default' : 'secondary'}>{neg.status}</Badge>
                                                         </div>
                                                     </CardContent>
                                                 </Card>
