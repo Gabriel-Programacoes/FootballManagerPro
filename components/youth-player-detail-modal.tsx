@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrendingUp, Star, Dna } from "lucide-react";
 import { useMemo } from "react";
+import { YouthPlayer } from "@/lib/game-data";
 
 // --- NOVO MAPA DE TRADUÇÃO ---
 const attributeTranslations: { [key: string]: string } = {
@@ -16,24 +17,6 @@ const attributeTranslations: { [key: string]: string } = {
     Defending: "Defesa",
     Physical: "Físico",
 };
-
-// Definimos a "forma" do jogador da base que este modal espera
-interface YouthPlayer {
-    name: string;
-    age: number;
-    position: string;
-    overall: number;
-    potential: number;
-    traits: string[];
-    attributes: {
-        Pace: number;
-        Shooting: number;
-        Passing: number;
-        Dribbling: number;
-        Defending: number;
-        Physical: number;
-    };
-}
 
 interface YouthPlayerDetailModalProps {
     player: YouthPlayer | null;
@@ -57,15 +40,15 @@ const AttributeRow = ({ name, value }: { name: string, value: number }) => (
 
 export function YouthPlayerDetailModal({ player, isOpen, onOpenChange }: YouthPlayerDetailModalProps) {
     const { best, worst } = useMemo(() => {
-        if (!player) {
-            return { best: [], worst: [] };
-        }
-        const sortedAttributes = Object.entries(player.attributes)
-            .sort(([, a], [, b]) => b - a);
+        if (!player) return { best: [], worst: [] };
 
+        // A lógica de ordenação está correta
+        const sortedAttributes = Object.entries(player.attributes).sort(([, a], [, b]) => b - a);
+
+        // A correção é como extraímos os dados
         return {
-            best: sortedAttributes.slice(0, 3),
-            worst: sortedAttributes.slice(-3).reverse()
+            best: sortedAttributes.slice(0, 3).map(([name, value]) => ({ name, value })),
+            worst: sortedAttributes.slice(-2).reverse().map(([name, value]) => ({ name, value }))
         };
     }, [player]);
 
@@ -90,37 +73,26 @@ export function YouthPlayerDetailModal({ player, isOpen, onOpenChange }: YouthPl
 
                 {/* --- LAYOUT APRIMORADO COM FLEXBOX --- */}
                 <div className="flex gap-6 py-4">
-                    {/* Coluna da Esquerda */}
                     <div className="flex-1 space-y-4">
                         <div>
                             <h4 className="font-semibold mb-2 text-primary">Análise Geral</h4>
                             <div className="space-y-2 text-sm p-3 bg-muted/50 rounded-lg">
                                 <div className="flex justify-between"><span>Overall Atual:</span><span className="font-bold flex items-center"><Star className="h-4 w-4 mr-1 text-yellow-500" />{player.overall}</span></div>
-                                <div className="flex justify-between"><span>Potencial:</span><span className="font-bold flex items-center"><TrendingUp className="h-4 w-4 mr-1 text-blue-500" />{player.potential}</span></div>
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold mb-2">Características</h4>
-                            <div className="flex flex-wrap gap-2">
-                                {player.traits.map((trait, index) => (
-                                    <Badge key={index} variant="secondary"><Dna className="h-3 w-3 mr-1"/>{trait}</Badge>
-                                ))}
+                                <div className="flex justify-between"><span>Potencial:</span><span className="font-bold flex items-center"><TrendingUp className="h-4 w-4 mr-1 text-blue-500" />{`${player.potential[0]}-${player.potential[1]}`}</span></div>
                             </div>
                         </div>
                     </div>
-
-                    {/* Coluna da Direita */}
                     <div className="flex-1 space-y-4">
                         <div>
                             <h4 className="font-semibold mb-2 text-green-500">Melhores Atributos</h4>
                             <div className="space-y-2 text-sm p-3 bg-green-500/10 rounded-lg">
-                                {best.map(([name, value]) => <AttributeRow key={name} name={name} value={value as number} />)}
+                                {best.map(attr => <AttributeRow key={attr.name} name={attr.name} value={attr.value} />)}
                             </div>
                         </div>
                         <div>
                             <h4 className="font-semibold mb-2 text-red-500">Piores Atributos</h4>
                             <div className="space-y-2 text-sm p-3 bg-red-500/10 rounded-lg">
-                                {worst.map(([name, value]) => <AttributeRow key={name} name={name} value={value as number} />)}
+                                {worst.map(attr => <AttributeRow key={attr.name} name={attr.name} value={attr.value} />)}
                             </div>
                         </div>
                     </div>

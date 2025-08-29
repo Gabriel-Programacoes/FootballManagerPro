@@ -78,7 +78,7 @@ export default function TransfersPage() {
     const [playerToEdit, setPlayerToEdit] = useState<ListedPlayer | null>(null);
 
     const [freeAgents, setFreeAgents] = useState<Player[]>([]);
-    const [isLoadingMarket, setIsLoadingMarket] = useState(true);
+    const [isLoadingMarket, setIsLoadingMarket] = useState(false);
 
     const [searchTerm, setSearchTerm] = useState("");
     const [positionFilter, setPositionFilter] = useState("all");
@@ -123,6 +123,7 @@ export default function TransfersPage() {
         }
         sendScoutOnMission({
             scoutId: parseInt(missionForm.scoutId),
+            type: 'senior',
             country: missionForm.country === "any" ? undefined : missionForm.country,
             leagueName: missionForm.leagueName === "any" ? undefined : missionForm.leagueName,
             position: missionForm.position === "any" ? undefined : missionForm.position,
@@ -159,9 +160,48 @@ export default function TransfersPage() {
         }
     }, [activeCareer]);
 
+    useEffect(() => {
+        if (activeTab === 'free-agents') {
+            loadFreeAgents();
+        }
+    }, [activeTab, loadFreeAgents]);
+
     const scoutedPlayers = useMemo(() => {
         if (!activeCareer) return [];
-        return activeCareer.scoutingReports.map(report => report.playerDetails);
+
+        return activeCareer.scoutingReports.map(report => {
+            const p = report.player;
+
+            // Este objeto "pseudo-Player" tem dados suficientes para a UI funcionar
+            const playerForDisplay: Player = {
+                id: p.id,
+                name: p.name,
+                age: p.age,
+                jerseyNumber: 0,
+                position: p.position,
+                overall: p.overall,
+                potential: p.potential[1], // Usamos o potencial máximo como referência
+                contract: {
+                    // Estimamos o valor e o salário para exibição, já que não estão no relatório de jovens
+                    value: (p.potential[1] * 15000) + (p.overall * 7000),
+                    wage: Math.round(((p.potential[1] * 15000) + (p.overall * 7000)) / 150),
+                    ends: 'N/A'
+                },
+                // Preenchemos os atributos com os dados simplificados do relatório
+                attributes: {
+                    pace: { acceleration: p.attributes.pace, sprintSpeed: p.attributes.pace },
+                    shooting: { finishing: p.attributes.shooting, penalties: p.attributes.shooting },
+                    passing: { crossing: p.attributes.passing, shortPassing: p.attributes.passing, longPassing: p.attributes.passing, freeKickAccuracy: p.attributes.passing },
+                    dribbling: { dribbling: p.attributes.dribbling },
+                    defending: { defAwareness: p.attributes.defending, standingTackle: p.attributes.defending, slidingTackle: p.attributes.defending },
+                    physical: { stamina: p.attributes.physical, strength: p.attributes.physical, aggression: p.attributes.physical },
+                    goalkeeping: { gkPositioning: null, gkReflexes: null, gkDiving: null },
+                    mentality: { weakFoot: 3, preferredFoot: 'Right' },
+                    profile: { height: '180cm', weight: '75kg', nation: 'Scouted', league: '', team: 'Unknown' }
+                }
+            };
+            return playerForDisplay;
+        });
     }, [activeCareer]);
 
     const listedPlayers = useMemo((): ListedPlayer[] => {

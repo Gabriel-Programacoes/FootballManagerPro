@@ -24,7 +24,7 @@ interface TacticPlayer {
     y: number;
     role: string;
 }
-interface Formation {
+export interface Formation {
     id: string;
     name: string;
     players: TacticPlayer[];

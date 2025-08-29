@@ -1,4 +1,5 @@
 import {Player} from "@/app/squad/page";
+import {Formation} from "@/app/tactics/page";
 
 export interface MatchResult {
     opponent: string;
@@ -36,29 +37,30 @@ export interface LoanListing {
     hasObligationToBuy: boolean;
 }
 
-export interface ScoutMission {
-    scoutId: number;
-    endDate: string;
-    region?: string;
-    country?: string;
-    leagueName?: string;
-    position?: string;
-}
-
-export interface ScoutingReport {
-    playerId: string;
-    scoutId: number;
-    dateFound: string;
-    notes: string;
-    playerDetails: Player;
-}
-
 export interface Scout {
     id: number;
     name: string;
     rating: number;
     specialty: string;
     status: 'Disponível' | 'Observando';
+    type: 'youth' | 'senior'; // 'youth' para promessas, 'senior' para jogadores existentes
+}
+
+export interface ScoutMission {
+    scoutId: number;
+    endDate: string;
+    type: 'youth' | 'senior';
+    country?: string;
+    leagueName?: string;
+    position?: string;
+}
+
+export interface ScoutingReport {
+    reportId: string;
+    scoutId: number;
+    dateFound: string;
+    notes: string;
+    player: YouthPlayer;
 }
 
 export interface Offer {
@@ -101,4 +103,18 @@ export interface CareerSave {
     scouts: Scout[];
     scoutMissions: ScoutMission[];
     scoutingReports: ScoutingReport[];
+    activeFormation: Formation | null;
+    youthSquad: YouthPlayer[];
+}
+
+export interface YouthPlayer {
+    id: string;
+    name: string;
+    nationality: string;
+    age: number;
+    position: string;
+    overall: number;
+    potential: [number, number];
+    attributes: { pace: number; shooting: number; passing: number; dribbling: number; defending: number; physical: number; };
+    traits: string[];
 }

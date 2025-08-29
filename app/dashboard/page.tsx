@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {useEffect, useMemo, useState} from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -21,11 +21,10 @@ interface DashboardData {
 
 export default function DashboardPage() {
   // --- HOOKS E ESTADOS ---
-  // Usamos o contexto refatorado para obter o estado completo da carreira e as novas ações
-  const { managedClub, managedLeague, activeCareer, advanceTime, isLoading: isCareerLoading } = useCareer();
+  const { managedClub, activeCareer, advanceTime, isLoading: isCareerLoading, schedule } = useCareer();
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isSimulating, setIsSimulating] = useState(false); // Estado de loading para o botão de avançar
+  const [isSimulating, setIsSimulating] = useState(false);
 
   // Efeito para buscar os dados iniciais do dashboard (sem alterações)
   useEffect(() => {
@@ -57,8 +56,15 @@ export default function DashboardPage() {
     setIsSimulating(false);
   };
 
-  // --- DADOS DE PROTÓTIPO (Ainda podem ser usados para partes não dinâmicas) ---
-  const nextMatch = { opponent: "Blue Lions FC", competition: "Premier Division", date: "A ser definido", time: "16:30", venue: "Old Stadium", difficulty: "Difícil" };
+  const nextMatch = useMemo(() => {
+    if (!activeCareer || schedule.length === 0) return null;
+
+    const currentDate = new Date(activeCareer.currentDate);
+
+    // Encontra a primeira partida no calendário que ainda não aconteceu
+    return schedule.find(match => new Date(match.matchDate) >= currentDate);
+
+  }, [activeCareer, schedule]);
 
   // --- RENDERIZAÇÃO ---
   if (isLoading || isCareerLoading || !activeCareer || !dashboardData) {
@@ -115,14 +121,37 @@ export default function DashboardPage() {
           <Card>
             <CardHeader><CardTitle className="flex items-center gap-2"><CalendarDays className="h-5 w-5" />Próxima Partida</CardTitle></CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3"><Avatar><AvatarFallback>BL</AvatarFallback></Avatar><div><p className="font-semibold">{nextMatch.opponent}</p><p className="text-sm text-muted-foreground">{nextMatch.competition}</p></div></div>
-                  <div className="text-right"><p className="font-semibold">{nextMatch.date}</p><p className="text-sm text-muted-foreground">{nextMatch.time}</p></div>
-                </div>
-                <div className="flex items-center justify-between"><Badge variant="outline">{nextMatch.venue}</Badge><Badge variant={nextMatch.difficulty === "Difícil" ? "destructive" : "default"}>{nextMatch.difficulty}</Badge></div>
-                <Button className="w-full">Preparar Tática</Button>
-              </div>
+              {/* ALTERADO: Renderização condicional para a próxima partida */}
+              {nextMatch ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <Avatar>
+                          <AvatarFallback>
+                            {(nextMatch.isHomeGame ? nextMatch.awayTeam.name : nextMatch.homeTeam.name).split(" ").map(n => n[0]).join("")}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-semibold">{nextMatch.isHomeGame ? nextMatch.awayTeam.name : nextMatch.homeTeam.name}</p>
+                          <p className="text-sm text-muted-foreground">{nextMatch.leagueName}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold">{new Date(nextMatch.matchDate).toLocaleDateString()}</p>
+                        <p className="text-sm text-muted-foreground">15:00</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Badge variant="outline">{nextMatch.isHomeGame ? 'Casa' : 'Fora'}</Badge>
+                      <Badge variant="default">Competitivo</Badge>
+                    </div>
+                    <Button className="w-full">Preparar Tática</Button>
+                  </div>
+              ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <p>Fim da temporada!</p>
+                  </div>
+              )}
             </CardContent>
           </Card>
 
@@ -142,7 +171,7 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* --- ÚLTIMOS RESULTADOS (Dados dinâmicos do save) --- */}
+        {/* --- ÚLTIMOS RESULTADOS --- */}
         <Card>
           <CardHeader><CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5" />Últimos Resultados</CardTitle></CardHeader>
           <CardContent>

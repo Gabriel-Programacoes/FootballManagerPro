@@ -13,7 +13,16 @@ import type { Scout } from "@/lib/game-data";
 
 // --- TIPOS E GERADOR DE OLHEIROS ---
 // Este é o tipo para um olheiro que está "à venda" no mercado. Não tem status ainda.
-type AvailableScout = Omit<Scout, 'status'>;
+export type AvailableScout = {
+    id: number;
+    name: string;
+    rating: number;
+    specialty: string;
+    nationality: string;
+    cost: string;
+    type: 'youth' | 'senior'; // Adicionamos o tipo aqui
+};
+
 
 interface HireScoutModalProps {
     isOpen: boolean;
@@ -36,7 +45,8 @@ const generateAvailableScouts = (): AvailableScout[] => {
             nationality: nationalities[index],
             rating,
             specialty: specialties[index],
-            cost: `€${cost}K`
+            cost: `€${cost}K`,
+            type: Math.random() > 0.5 ? 'youth' : 'senior', // Gera tipos aleatórios por enquanto
         };
     });
 };

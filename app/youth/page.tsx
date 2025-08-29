@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -8,130 +8,108 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TrendingUp, GraduationCap, Eye, Globe, Star, Plus, Send, AlertCircle, Clock } from "lucide-react";
+import { GraduationCap, Eye, Star, Plus, Send, AlertCircle, Users, FileSearch } from "lucide-react";
 import { useCareer } from "@/contexts/career-context";
 import { YouthPlayerDetailModal } from "@/components/youth-player-detail-modal";
-import { HireScoutModal } from "@/components/hire-scout-modal";
-import { cn } from "@/lib/utils";
+import {AvailableScout, HireScoutModal} from "@/components/hire-scout-modal";
+import {cn, formatCompactNumber} from "@/lib/utils";
+import { YouthPlayer } from "@/lib/game-data";
+import { Country } from "@/app/team-select/page";
 
-// --- TIPOS DE DADOS ---
-interface Scout {
-    id: number;
-    name: string;
-    rating: number;
-    specialty: string;
-    region: string;
-    status: 'Disponível' | 'Observando' | 'Retornando' | 'Descansando';
-    mission?: {
-        region: string;
-        country?: string;
-        positionType?: string;
-        trait?: string;
-        duration: string;
-    };
-}
 
-// --- DADOS DE PROTÓTIPO (MOCK DATA) ---
-const regionsAndCountries = {
-    "América do Sul": ["Argentina", "Brasil", "Colômbia", "Uruguai"],
-    "Europa Ocidental": ["Espanha", "Portugal", "França", "Inglaterra"],
-    "Europa Central": ["Alemanha", "Itália", "Holanda", "Bélgica"],
-    "Norte de África": ["Marrocos", "Argélia", "Egito"],
-};
-const positionTypes = ["Goleiros", "Defensores", "Meio-campistas", "Atacantes"];
-const traitsByPositionType = {
-    "Goleiros": ["Reflexos Rápidos", "Bom com os Pés"],
-    "Defensores": ["Forte no Desarme", "Velocista", "Liderança"],
-    "Meio-campistas": ["Técnico", "Passador Longo", "Criatividade"],
-    "Atacantes": ["Finalizador Nato", "Velocista", "Driblador"],
-};
-const durationOptions = ["1 mês", "3 meses", "6 meses"];
-const initialScoutNetwork: Scout[] = [
-    { id: 1, name: "João Pereira", rating: 4, specialty: "Atacantes", region: "América do Sul", status: "Observando" },
-    { id: 2, name: "David Smith", rating: 3, specialty: "Defensores", region: "Descansando", status: "Disponível" },
-];
-const scoutedPlayers: any[] = [
-    { id: 101, name: "Felipe Andrade", age: 15, position: "ATA", potentialRange: "85-92", region: "Brasil" },
-    { id: 102, name: "Lars Jansen", age: 16, position: "ZAG", potentialRange: "78-85", region: "Holanda" },
-];
-const youthSquad: any[] = [
-    { name: "Tiago Alves", age: 17, position: "AE", overall: 65, potential: 87, growth: "+3", traits: ["Velocista"], attributes: { Pace: 82, Shooting: 68, Passing: 60, Dribbling: 75, Defending: 30, Physical: 55 } },
-    { name: "Ben Carter", age: 18, position: "MC", overall: 68, potential: 82, growth: "+2", traits: ["Passador Longo"], attributes: { Pace: 65, Shooting: 62, Passing: 78, Dribbling: 70, Defending: 55, Physical: 60 } },
-];
+// Componente para estado vazio
+const EmptyState = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
+    <div className="text-center py-12">
+        <Icon className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
+        <h3 className="text-lg font-semibold mb-2">{title}</h3>
+        <p className="text-muted-foreground">{description}</p>
+    </div>
+);
 
 
 export default function YouthAcademyPage() {
-    // --- GESTÃO DE ESTADO (State Management) ---
-    const { managedClub } = useCareer();
-    const [scoutNetwork, setScoutNetwork] = useState<Scout[]>(initialScoutNetwork);
-    const [selectedYouthPlayer, setSelectedYouthPlayer] = useState<any>(null);
+    // --- GESTÃO DE ESTADO ---
+    const {
+        managedClub,
+        youthSquad,
+        activeCareer,
+        scouts,
+        hireScout,
+        sendScoutOnMission
+    } = useCareer();
+
+    const [selectedYouthPlayer, setSelectedYouthPlayer] = useState<YouthPlayer | null>(null);
     const [isHireModalOpen, setIsHireModalOpen] = useState(false);
+    const [countriesData, setCountriesData] = useState<Country[]>([]);
 
     // Estado do formulário de envio de olheiro
-    const [formState, setFormState] = useState({
+    const [missionForm, setMissionForm] = useState({
         scoutId: undefined as string | undefined,
-        region: undefined as string | undefined,
-        country: undefined as string | undefined,
-        positionType: undefined as string | undefined,
-        trait: undefined as string | undefined,
-        duration: undefined as string | undefined,
+        country: "any",
+        leagueName: "any",
+        position: "any",
     });
     const [scoutError, setScoutError] = useState<string | null>(null);
 
-    // --- MANIPULADORES DE EVENTOS (Event Handlers) ---
-    const handleHireScout = (scoutToHire: any) => {
-        if (scoutNetwork.length >= 5) {
-            alert("Você atingiu o limite máximo de 5 olheiros.");
-            return;
-        }
-        const newScout: Scout = { ...scoutToHire, status: "Disponível", region: "Descansando" };
-        setScoutNetwork(prevNetwork => [...prevNetwork, newScout]);
+    // --- BUSCA DE DADOS PARA FILTROS DE OBSERVAÇÃO ---
+    useEffect(() => {
+        const fetchFilterData = async () => {
+            const response = await fetch('/api/countries');
+            if(response.ok) {
+                const data = await response.json();
+                setCountriesData(data);
+            }
+        };
+        fetchFilterData();
+    }, []);
+
+    const handleHireScout = (scoutToHire: AvailableScout) => {
+        // Converte o olheiro 'AvailableScout' para o tipo 'Scout' que o contexto espera
+        hireScout({
+            ...scoutToHire,
+            status: 'Disponível',
+        });
         setIsHireModalOpen(false);
-        alert(`Olheiro ${scoutToHire.name} contratado com sucesso!`);
     };
 
+    // --- MANIPULADORES DE EVENTOS CONECTADOS AO CONTEXTO ---
     const handleSendScout = () => {
         setScoutError(null);
-        const { scoutId, region, duration } = formState;
-        if (!scoutId || !region || !duration) {
-            setScoutError("Por favor, selecione um olheiro, uma região e a duração.");
+        if (!missionForm.scoutId) {
+            setScoutError("Por favor, selecione um olheiro disponível.");
             return;
         }
-        const scoutsInRegionCount = scoutNetwork.filter(s => s.mission?.region === region).length;
-        if (scoutsInRegionCount >= 2) {
-            setScoutError(`Você já tem o máximo de 2 olheiros na região: ${region}.`);
-            return;
-        }
-        setScoutNetwork(prevNetwork =>
-            prevNetwork.map(scout =>
-                scout.id === parseInt(scoutId)
-                    ? { ...scout, status: 'Observando', region, mission: { ...formState, region, duration } }
-                    : scout
-            )
-        );
-        setFormState({ scoutId: undefined, region: undefined, country: undefined, positionType: undefined, trait: undefined, duration: undefined });
-        alert(`Missão iniciada!`);
+
+
+        sendScoutOnMission({
+            scoutId: parseInt(missionForm.scoutId),
+            type: 'youth',
+            country: missionForm.country === "any" ? undefined : missionForm.country,
+        });
+
+        // Reseta o formulário para a próxima missão
+        setMissionForm(s => ({...s, scoutId: undefined}));
     };
 
-    const updateFormField = (field: keyof typeof formState, value: string) => {
-        const newState = { ...formState, [field]: value };
-        if (field === 'region') newState.country = undefined;
-        if (field === 'positionType') newState.trait = undefined;
-        setFormState(newState);
-    };
+    const leaguesForSelectedCountry = useMemo(() => {
+        if (missionForm.country === "any") return [];
+        return countriesData.find(c => c.name === missionForm.country)?.leagues || [];
+    }, [missionForm.country, countriesData]);
+
 
     return (
         <>
             <div className="space-y-6">
                 <div>
-                    <h1 className="text-3xl font-bold">Categorias de Base</h1>
-                    <p className="text-muted-foreground">Desenvolva os futuros talentos do {managedClub?.name}</p>
+                    <h1 className="text-3xl font-bold">Categorias de Base & Observação</h1>
+                    <p className="text-muted-foreground">Desenvolva os futuros talentos e descubra novas jóias para o {managedClub?.name}</p>
                 </div>
 
-                <Tabs defaultValue="scouting">
-                    <TabsList className="grid w-full grid-cols-2">
+                <Tabs defaultValue="squad">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="squad">Elenco da Base ({youthSquad.length})</TabsTrigger>
-                        <TabsTrigger value="scouting">Observação ({scoutNetwork.length})</TabsTrigger>
+                        <TabsTrigger value="scouting">Observação ({activeCareer?.scouts.length || 0})</TabsTrigger>
+                        <TabsTrigger value="reports">Relatórios ({activeCareer?.scoutingReports.length || 0})</TabsTrigger>
                     </TabsList>
 
                     {/* Aba do Elenco da Base */}
@@ -139,35 +117,38 @@ export default function YouthAcademyPage() {
                         <Card>
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2"><GraduationCap className="h-5 w-5" />Elenco da Base</CardTitle>
-                                <CardDescription>Acompanhe e gira o desenvolvimento dos seus jovens talentos</CardDescription>
+                                <CardDescription>Acompanhe e gira o desenvolvimento dos seus jovens talentos.</CardDescription>
                             </CardHeader>
                             <CardContent>
                                 {youthSquad.length === 0 ? (
-                                    <div className="text-center py-12 text-muted-foreground"><p>A sua academia está vazia. Contrate olheiros para encontrar novos talentos.</p></div>
+                                    <EmptyState
+                                        icon={GraduationCap}
+                                        title="A academia está vazia"
+                                        description="Uma nova safra de talentos chegará no início da próxima temporada (15 de Julho)."
+                                    />
                                 ) : (
                                     <div className="space-y-4">
-                                        {youthSquad.map((player, index) => (
-                                            <div key={index} className="p-4 rounded-lg border">
-                                                <div className="flex items-center justify-between mb-4">
+                                        {youthSquad.map((player) => (
+                                            <div key={player.id} className="p-4 rounded-lg border">
+                                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                                     <div className="flex items-center space-x-4">
                                                         <Avatar className="h-12 w-12"><AvatarFallback>{player.name.split(" ").map((n: string) => n[0]).join("")}</AvatarFallback></Avatar>
                                                         <div>
                                                             <div className="flex items-center space-x-2"><h3 className="font-semibold">{player.name}</h3><Badge variant="outline">{player.position}</Badge><span className="text-sm text-muted-foreground">{player.age} anos</span></div>
                                                             <div className="flex items-center space-x-4 mt-1">
                                                                 <div className="text-sm">Overall: <span className="font-bold text-green-500">{player.overall}</span></div>
-                                                                <div className="text-sm">Potencial: <span className="font-bold text-blue-500">{player.potential}</span></div>
-                                                                <Badge><TrendingUp className="h-3 w-3 mr-1" />{player.growth}</Badge>
+                                                                <div className="text-sm">Potencial: <span className="font-bold text-blue-500">{`${player.potential[0]}-${player.potential[1]}`}</span></div>
                                                             </div>
                                                         </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 self-end sm:self-center">
                                                         <Button variant="outline" size="sm" onClick={() => setSelectedYouthPlayer(player)}><Eye className="h-4 w-4 mr-1"/> Ver Análise</Button>
                                                         <Button size="sm">Promover</Button>
                                                     </div>
                                                 </div>
-                                                <div className="space-y-2">
-                                                    <div className="flex justify-between text-xs text-muted-foreground"><span>{player.overall} --&gt; {player.overall + 1}</span></div>
-                                                    <Progress value={(player.overall / player.potential) * 100} className="h-2" />
+                                                <div className="space-y-2 mt-3">
+                                                    <div className="flex justify-between text-xs text-muted-foreground"><span>Progresso para o próximo nível</span></div>
+                                                    <Progress value={(player.overall / player.potential[1]) * 100} className="h-2" />
                                                 </div>
                                             </div>
                                         ))}
@@ -177,93 +158,131 @@ export default function YouthAcademyPage() {
                         </Card>
                     </TabsContent>
 
-                    <TabsContent value="scouting" className="mt-6 space-y-6">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Aba de Observação */}
+                    <TabsContent value="scouting" className="mt-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
                             <Card>
-                                <CardHeader>
-                                    <CardTitle>Rede de Olheiros ({scoutNetwork.length}/5)</CardTitle>
-                                    <CardDescription>Gira a sua equipa de até 5 olheiros</CardDescription>
+                                <CardHeader className="flex flex-row items-start justify-between">
+                                    <div>
+                                        <CardTitle>Rede de Olheiros ({scouts.length}/5)</CardTitle>
+                                        <CardDescription>Gira a sua equipa de olheiros.</CardDescription>
+                                    </div>
+                                    <Button size="sm" onClick={() => setIsHireModalOpen(true)} disabled={scouts.length >= 5}>
+                                        <Plus className="h-4 w-4 mr-2"/>Contratar
+                                    </Button>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {scoutNetwork.map(scout => (
-                                        <div key={scout.id} className="p-3 rounded-lg border flex items-center justify-between">
-                                            <div>
-                                                <p className="font-semibold">{scout.name}</p>
-                                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                                    <div className="flex items-center">{Array.from({ length: 5 }).map((_, i) => <Star key={i} className={cn("h-3 w-3", i < scout.rating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground/30")} />)}</div>
-                                                    <span>• {scout.specialty}</span>
+                                    {scouts.length === 0 ? (
+                                        <EmptyState icon={Users} title="Nenhum Olheiro Contratado" description="Clique em 'Contratar' para montar a sua equipa." />
+                                    ) : (
+                                        scouts.map(scout => (
+                                            <div key={scout.id} className="p-3 rounded-lg border flex items-center justify-between">
+                                                <div>
+                                                    <p className="font-semibold">{scout.name}</p>
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        <div className="flex items-center">{Array.from({ length: 5 }).map((_, i) => <Star key={i} className={cn("h-3 w-3", i < scout.rating ? "text-yellow-500 fill-yellow-500" : "text-muted-foreground/30")} />)}</div>
+                                                        <span>• {scout.specialty}</span>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                            <div className="text-right">
                                                 <Badge variant={scout.status === 'Disponível' ? 'default' : 'secondary'}>{scout.status}</Badge>
-                                                <p className="text-xs text-muted-foreground mt-1">Região: {scout.region}</p>
                                             </div>
-                                        </div>
-                                    ))}
-                                    {scoutNetwork.length < 5 && (
-                                        <Button variant="outline" className="w-full" onClick={() => setIsHireModalOpen(true)}>
-                                            <Plus className="h-4 w-4 mr-2"/>Contratar Olheiro
-                                        </Button>
+                                        ))
                                     )}
                                 </CardContent>
                             </Card>
                             <Card>
                                 <CardHeader>
-                                    <CardTitle>Enviar Olheiro</CardTitle>
-                                    <CardDescription>Defina os parâmetros da sua missão</CardDescription>
+                                    <CardTitle>Nova Missão de Observação</CardTitle>
+                                    <CardDescription>Envie um olheiro para encontrar talentos.</CardDescription>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <Select value={formState.scoutId} onValueChange={(val) => updateFormField('scoutId', val)}>
+                                    <Select value={missionForm.scoutId} onValueChange={(val) => setMissionForm(s => ({...s, scoutId: val}))}>
                                         <SelectTrigger><SelectValue placeholder="Escolha um olheiro disponível..." /></SelectTrigger>
-                                        <SelectContent>{scoutNetwork.filter(s => s.status === 'Disponível').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.rating} estrelas)</SelectItem>)}</SelectContent>
+                                        <SelectContent>{scouts.filter(s => s.status === 'Disponível').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.rating} estrelas)</SelectItem>)}</SelectContent>
                                     </Select>
-                                    <Select value={formState.region} onValueChange={(val) => updateFormField('region', val)}>
-                                        <SelectTrigger><SelectValue placeholder="Escolha uma região..." /></SelectTrigger>
-                                        <SelectContent>{Object.keys(regionsAndCountries).map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                                    <Select value={missionForm.country} onValueChange={(val) => setMissionForm(s => ({...s, country: val, leagueName: "any"}))}>
+                                        <SelectTrigger><SelectValue placeholder="País" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="any">Qualquer País</SelectItem>
+                                            {countriesData.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
+                                        </SelectContent>
                                     </Select>
-                                    {formState.region && (
-                                        <Select value={formState.country} onValueChange={(val) => updateFormField('country', val)}>
-                                            <SelectTrigger><SelectValue placeholder="País específico (opcional)..." /></SelectTrigger>
-                                            <SelectContent>{regionsAndCountries[formState.region as keyof typeof regionsAndCountries].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                                        </Select>
-                                    )}
-                                    <Select value={formState.positionType} onValueChange={(val) => updateFormField('positionType', val)}>
-                                        <SelectTrigger><SelectValue placeholder="Tipo de Posição (opcional)..." /></SelectTrigger>
-                                        <SelectContent>{positionTypes.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}</SelectContent>
-                                    </Select>
-                                    {formState.positionType && (
-                                        <Select value={formState.trait} onValueChange={(val) => updateFormField('trait', val)}>
-                                            <SelectTrigger><SelectValue placeholder="Característica principal (opcional)..." /></SelectTrigger>
-                                            <SelectContent>{(traitsByPositionType[formState.positionType as keyof typeof traitsByPositionType] || []).map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                                        </Select>
-                                    )}
-                                    <Select value={formState.duration} onValueChange={(val) => updateFormField('duration', val)}>
-                                        <SelectTrigger><div className="flex items-center gap-2"><Clock className="h-4 w-4 text-muted-foreground" /><SelectValue placeholder="Duração da missão..." /></div></SelectTrigger>
-                                        <SelectContent>{durationOptions.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                                    <Select value={missionForm.leagueName} onValueChange={(val) => setMissionForm(s => ({...s, leagueName: val}))} disabled={missionForm.country === 'any'}>
+                                        <SelectTrigger><SelectValue placeholder="Liga" /></SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="any">Qualquer Liga</SelectItem>
+                                            {leaguesForSelectedCountry.map(l => <SelectItem key={l.name} value={l.name}>{l.name}</SelectItem>)}
+                                        </SelectContent>
                                     </Select>
                                     {scoutError && (<div className="flex items-center gap-2 text-sm text-destructive p-2 bg-destructive/10 rounded-lg"><AlertCircle className="h-4 w-4" /><p>{scoutError}</p></div>)}
-                                    <Button className="w-full" onClick={handleSendScout}><Send className="h-4 w-4 mr-2"/>Enviar em Missão</Button>
+                                    <Button className="w-full" onClick={handleSendScout} disabled={!missionForm.scoutId}><Send className="h-4 w-4 mr-2"/>Enviar em Missão</Button>
                                 </CardContent>
                             </Card>
                         </div>
+                    </TabsContent>
+
+                    {/* Aba de Relatórios */}
+                    <TabsContent value="reports" className="mt-6">
                         <Card>
-                            <CardHeader><CardTitle>Relatórios de Jovens</CardTitle><CardDescription>Jogadores encontrados pelos seus olheiros</CardDescription></CardHeader>
+                            <CardHeader>
+                                <CardTitle>Relatórios de Observação</CardTitle>
+                                <CardDescription>Jogadores encontrados pelos seus olheiros.</CardDescription>
+                            </CardHeader>
                             <CardContent className="space-y-3">
-                                {scoutedPlayers.length === 0 ? (
-                                    <div className="text-center py-12 text-muted-foreground"><p>Nenhum relatório de jogador disponível.</p></div>
-                                ) : (scoutedPlayers.map(player => (
-                                    <div key={player.id} className="p-3 rounded-lg border flex items-center justify-between">
-                                        <div className="flex items-center gap-3"><Avatar><AvatarFallback>{player.name.split(" ").map((n:string) => n[0]).join("")}</AvatarFallback></Avatar><div><p className="font-semibold">{player.name} ({player.age})</p><div className="flex items-center gap-2 text-xs text-muted-foreground"><Badge variant="outline">{player.position}</Badge><span className="flex items-center"><Globe className="h-3 w-3 mr-1"/>{player.region}</span></div></div></div>
-                                        <div className="flex items-center gap-4"><div className="text-right"><p className="font-bold text-blue-500">{player.potentialRange}</p><p className="text-xs text-muted-foreground">Potencial Estimado</p></div><Button size="sm">Assinar para a Base</Button></div>
-                                    </div>
-                                )))}
+                                {activeCareer?.scoutingReports.length === 0 ? (
+                                    <EmptyState icon={FileSearch} title="Nenhum Relatório Disponível" description="Os relatórios dos seus olheiros aparecerão aqui quando eles retornarem de suas missões." />
+                                ) : (activeCareer?.scoutingReports.map(report => {
+                                    const player = report.player;
+                                    const potentialMidPoint = (player.potential[0] + player.potential[1]) / 2;
+                                    const signingCost = Math.floor((potentialMidPoint * 1000) + (player.overall * 500));
+
+                                    return (
+                                        <div key={player.id} className="p-3 rounded-lg border flex items-center justify-between">
+                                            <div className="flex items-center gap-3">
+                                                <Avatar><AvatarFallback>{player.name.split(" ").map(n => n[0]).join("")}</AvatarFallback></Avatar>
+                                                <div>
+                                                    <p className="font-semibold">{player.name} ({player.age})</p>
+                                                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                                        <Badge variant="outline">{player.position}</Badge>
+                                                        <span className="flex items-center"><Star className="h-3 w-3 mr-1 text-yellow-500"/>{player.overall}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1 mt-2">
+                                                        {player.traits && player.traits.map(trait => (
+                                                            <Badge key={trait} variant="secondary">{trait}</Badge>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-4">
+                                                <div className="text-right">
+                                                    <p className="font-bold text-blue-500">{player.potential}</p>
+                                                    <p className="text-xs text-muted-foreground">Potencial</p>
+                                                </div>
+                                                <div className="flex flex-col items-end gap-2">
+                                                    <p className="font-semibold text-sm text-green-500">€{formatCompactNumber(signingCost)}</p>
+                                                    <Button
+                                                        size="sm"
+                                                        // Desabilita o botão se o orçamento for insuficiente
+                                                        disabled={(activeCareer?.budget || 0) < signingCost}
+                                                    >
+                                                        <Plus className="h-4 w-4 mr-1"/> Assinar para Academia
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                }))}
                             </CardContent>
                         </Card>
                     </TabsContent>
                 </Tabs>
             </div>
             <YouthPlayerDetailModal player={selectedYouthPlayer} isOpen={!!selectedYouthPlayer} onOpenChange={(isOpen) => !isOpen && setSelectedYouthPlayer(null)} />
-            <HireScoutModal isOpen={isHireModalOpen} onOpenChange={setIsHireModalOpen} onHire={handleHireScout} />
+            <HireScoutModal
+                isOpen={isHireModalOpen}
+                onOpenChange={setIsHireModalOpen}
+                onHire={handleHireScout}
+            />
         </>
     );
 }

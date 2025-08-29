@@ -11,11 +11,13 @@ import {
     SeasonObjective,
     LoanListing,
     Negotiation,
-    CareerSave, ScoutingReport, ScoutMission, Scout, Offer
+    CareerSave, ScoutingReport, ScoutMission, Scout, Offer, YouthPlayer
 } from "@/lib/game-data";
 import {formatCompactNumber} from "@/lib/utils";
 import {processNegotiation} from "@/lib/simulation/negotiation-engine";
 import {generateAiOffer} from "@/lib/simulation/ai-offer-engine";
+import { ScheduleMatch } from '@/app/api/schedule/[clubId]/route';
+import {Formation} from "@/app/tactics/page";
 
 // --- TIPO DO CONTEXTO ---
 interface CareerContextType {
@@ -27,6 +29,12 @@ interface CareerContextType {
     isLoading: boolean;
     careers: CareerSave[];
     squad: Player[];
+    schedule: ScheduleMatch[];
+    activeFormation: Formation | null;
+    updateFormation: (formation: Formation) => void;
+    signYouthPlayer: (reportId: string) => void;
+    youthSquad: YouthPlayer[];
+    scouts: Scout[];
 
     // Carreira
     loadCareer: (index: number) => void;
@@ -58,6 +66,7 @@ interface CareerContextType {
     recallScout: (scoutId: number) => void;
     fireScout: (scoutId: number) => void;
     hireScout: (scout: Scout) => void;
+
 }
 
 const CareerContext = createContext<CareerContextType | undefined>(undefined);
@@ -71,6 +80,11 @@ function useCareerState() {
     const [leagues, setLeagues] = useState<League[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [squad, setSquad] = useState<Player[]>([]);
+    const [schedule, setSchedule] = useState<ScheduleMatch[]>([]);
+    const [activeFormation, setActiveFormation] = useState<Formation | null>(null);
+    const [youthSquad, setYouthSquad] = useState<YouthPlayer[]>([]);
+    const [scouts, setScouts] = useState<Scout[]>([]);
+
 
 
     const getPlayerSquad = useCallback(async (): Promise<Player[]> => {
@@ -88,8 +102,32 @@ function useCareerState() {
     useEffect(() => {
         if (activeCareer?.clubId) {
             getPlayerSquad().then(setSquad);
+            // NOVO: Lógica para buscar o calendário
+            const fetchSchedule = async () => {
+                const response = await fetch(`/api/schedule/${activeCareer.clubId}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    setSchedule(data);
+                } else {
+                    setSchedule([]);
+                }
+            };
+            fetchSchedule();
+            if (activeCareer.activeFormation) {
+                setActiveFormation(activeCareer.activeFormation);
+            }
+            if (activeCareer.youthSquad) {
+                setYouthSquad(activeCareer.youthSquad);
+            }
+            if (activeCareer.scouts) {
+                setScouts(activeCareer.scouts);
+            }
         } else {
-            setSquad([]); // Limpa o plantel se não houver carreira ativa
+            setSquad([]);
+            setSchedule([]);
+            setActiveFormation(null);
+            setYouthSquad([]);
+            setScouts([]);
         }
     }, [activeCareer, getPlayerSquad]);
 
@@ -109,11 +147,10 @@ function useCareerState() {
                         transferList: career.transferList || [],
                         loanList: career.loanList || [],
                         negotiations: career.negotiations || [],
-                        scouts: career.scouts || [ // Adiciona um olheiro inicial para saves antigos
-                            { id: 1, name: "Jorge Costa", rating: 3, specialty: "Jovens Promessas", status: 'Disponível' }
-                        ],
+                        scouts: career.scouts || [],
                         scoutMissions: career.scoutMissions || [],
                         scoutingReports: career.scoutingReports || [],
+                        youthSquad: career.youthSquad || [],
                     }));
 
                     setCareers(parsedCareers);
@@ -137,14 +174,25 @@ function useCareerState() {
     }, []);
 
     const saveCareerProgress = useCallback((updatedCareer: CareerSave) => {
-        if (activeCareerIndex !== null) {
-            const updatedCareers = [...careers];
+        if (activeCareerIndex === null) return;
+
+        // A correção está em usar a forma funcional de 'setState'.
+        // Isto garante que estamos sempre a modificar a versão mais recente do estado 'careers'.
+        setCareers(currentCareers => {
+            // Cria uma cópia do array de carreiras mais atual
+            const updatedCareers = [...currentCareers];
+            // Atualiza a carreira ativa na sua posição correta
             updatedCareers[activeCareerIndex] = updatedCareer;
-            setCareers(updatedCareers);
-            setActiveCareer(updatedCareer);
+
+            // Salva a lista de carreiras 100% atualizada no localStorage
             localStorage.setItem('careers', JSON.stringify(updatedCareers));
-        }
-    }, [activeCareerIndex, careers]);
+
+            // Retorna o novo estado para o React
+            return updatedCareers;
+        });
+
+        setActiveCareer(updatedCareer);
+    }, [activeCareerIndex]);
 
     const listPlayerForLoan = (playerId: string, conditions: Omit<LoanListing, 'playerId' | 'isListed'>) => {
         if (!activeCareer) return;
@@ -285,6 +333,43 @@ function useCareerState() {
         }
     };
 
+    const updateFormation = (formation: Formation) => {
+        if (!activeCareer) return;
+        setActiveFormation(formation);
+        const newCareerState = { ...activeCareer, activeFormation: formation };
+        saveCareerProgress(newCareerState);
+    };
+
+    const signYouthPlayer = (reportId: string) => {
+        if (!activeCareer) return;
+
+        const report = activeCareer.scoutingReports.find(r => r.reportId === reportId);
+        if (!report) return;
+
+        const potentialMidPoint = (report.player.potential[0] + report.player.potential[1]) / 2;
+        const signingCost = Math.floor((potentialMidPoint * 1000) + (report.player.overall * 500));
+
+        // Verifica se há orçamento suficiente
+        if (activeCareer.budget < signingCost) {
+            alert(`Orçamento insuficiente! Contratar ${report.player.name} custa €${signingCost.toLocaleString()}.`);
+            return;
+        }
+
+        const newCareerState = { ...activeCareer };
+        // Adiciona o jogador à academia
+        newCareerState.youthSquad.push(report.player);
+        // Remove o relatório da lista de disponíveis
+        newCareerState.scoutingReports = newCareerState.scoutingReports.filter(r => r.reportId !== reportId);
+
+        newCareerState.news.unshift({
+            title: `${report.player.name} foi contratado para a academia por €${formatCompactNumber(signingCost)}.`,
+            date: new Date().toISOString(),
+            type: 'positive'
+        });
+        saveCareerProgress(newCareerState);
+        setYouthSquad([...newCareerState.youthSquad]);
+    };
+
     const advanceTime = useCallback(async () => {
         if (!activeCareer) return;
 
@@ -292,6 +377,134 @@ function useCareerState() {
         const currentDate = new Date(newCareerState.currentDate);
         currentDate.setDate(currentDate.getDate() + 1);
         newCareerState.currentDate = currentDate.toISOString();
+
+        const completedMissions = newCareerState.scoutMissions.filter(m => new Date(m.endDate) <= currentDate);
+        for (const mission of completedMissions) {
+            const scout = newCareerState.scouts.find(s => s.id === mission.scoutId);
+            if (!scout) continue;
+            scout.status = 'Disponível';
+
+            // --- LÓGICA PARA OLHEIROS DE JOVENS ---
+            if (mission.type === 'youth') {
+                try {
+                    let apiUrl = `/api/youth/generate?scoutRating=${scout.rating}`;
+                    if (mission.country) {
+                        apiUrl += `&country=${encodeURIComponent(mission.country)}`;
+                    }
+
+                    const response = await fetch(apiUrl);
+
+                    if (response.ok) {
+                        const newPlayers: YouthPlayer[] = await response.json();
+                        for (const player of newPlayers) {
+                            newCareerState.scoutingReports.unshift({
+                                reportId: `rep_${player.id}`,
+                                scoutId: scout.id,
+                                dateFound: currentDate.toISOString(),
+                                notes: `Jovem talento gerado por ${scout.name}.`,
+                                player: player,
+                            });
+                        }
+                        newCareerState.news.unshift({ title: `Relatório de ${scout.name} chegou com ${newPlayers.length} novas promessas.`, date: currentDate.toISOString(), type: 'neutral' });
+                    }
+                } catch (error) { console.error("Falha ao processar missão de jovens:", error); }
+            }
+            // --- LÓGICA PARA OLHEIROS DE JOGADORES EXISTENTES (SÊNIOR) ---
+            else if (mission.type === 'senior') {
+                try {
+                    // Monta a URL para buscar jogadores existentes no mercado
+                    const minPotential = 65 + (scout.rating * 4);
+                    let url = `/api/market?excludeClubId=${activeCareer.clubId}&freeAgentsOnly=false&limit=1&minPotential=${minPotential}`;
+                    if (mission.country) url += `&country=${encodeURIComponent(mission.country)}`;
+                    if (mission.leagueName) url += `&leagueName=${encodeURIComponent(mission.leagueName)}`;
+                    if (mission.position) url += `&position=${encodeURIComponent(mission.position)}`;
+
+                    const response = await fetch(url);
+                    const potentialPlayers: Player[] = await response.json();
+
+                    if (potentialPlayers.length > 0) {
+                        const foundPlayer = potentialPlayers[0];
+                        // Adapta o jogador profissional encontrado para a estrutura de YouthPlayer para o relatório
+                        const playerForReport: YouthPlayer = {
+                            id: foundPlayer.id,
+                            name: foundPlayer.name,
+                            age: foundPlayer.age,
+                            position: foundPlayer.position,
+                            overall: foundPlayer.overall,
+                            potential: [foundPlayer.potential, foundPlayer.potential],
+                            // Mapeia os atributos principais
+                            attributes: {
+                                pace: Math.round((foundPlayer.attributes.pace.acceleration + foundPlayer.attributes.pace.sprintSpeed) / 2),
+                                shooting: foundPlayer.attributes.shooting.finishing,
+                                passing: foundPlayer.attributes.passing.shortPassing,
+                                dribbling: foundPlayer.attributes.dribbling.dribbling,
+                                defending: foundPlayer.attributes.defending.standingTackle,
+                                physical: foundPlayer.attributes.physical.strength,
+                            },
+                            traits: [],
+                        };
+
+                        // Verifica se já não existe um relatório para este jogador
+                        if (!newCareerState.scoutingReports.some(r => r.player.id === playerForReport.id)) {
+                            newCareerState.scoutingReports.unshift({
+                                reportId: `rep_${playerForReport.id}`,
+                                scoutId: scout.id,
+                                dateFound: currentDate.toISOString(),
+                                notes: `Observado por ${scout.name} no ${foundPlayer.attributes.profile.team}.`,
+                                player: playerForReport,
+                            });
+                            newCareerState.news.unshift({ title: `Relatório de ${scout.name}: ${foundPlayer.name} parece promissor.`, date: currentDate.toISOString(), type: 'positive' });
+                        }
+                    }
+                } catch (error) { console.error("Falha ao processar missão sênior:", error); }
+            }
+        }
+        newCareerState.scoutMissions = newCareerState.scoutMissions.filter(m => !completedMissions.some(cm => cm.scoutId === m.scoutId));
+
+        // --- LÓGICA DE PARTIDA ---
+        const todayString = currentDate.toISOString().split('T')[0];
+        const matchForToday = schedule.find(m => m.matchDate.startsWith(todayString));
+
+        if (matchForToday) {
+            // Busca o elenco do adversário para a simulação
+            const opponentSquadRes = await fetch(`/api/squad/${matchForToday.isHomeGame ? matchForToday.homeTeam.id : matchForToday.awayTeam.id}`);
+            const opponentSquad = opponentSquadRes.ok ? await opponentSquadRes.json() : [];
+
+            // Define quem é o time da casa e o visitante
+            const homeTeam = {
+                name: matchForToday.homeTeam.name,
+                players: matchForToday.isHomeGame ? squad : opponentSquad,
+                formation: matchForToday.isHomeGame ? activeFormation : null
+            };
+            const awayTeam = {
+                name: matchForToday.awayTeam.name,
+                players: matchForToday.isHomeGame ? opponentSquad : squad,
+                formation: !matchForToday.isHomeGame ? activeFormation : null
+            };
+
+            const matchSimulation = simulateMatch(homeTeam, awayTeam);
+
+            const matchResult: MatchResult = {
+                opponent: matchForToday.isHomeGame ? awayTeam.name : homeTeam.name,
+                result: `${matchSimulation.homeGoals}-${matchSimulation.awayGoals}`,
+                competition: matchForToday.leagueName,
+                home: matchForToday.isHomeGame,
+                points: matchSimulation.homeGoals > matchSimulation.awayGoals ? 3 : matchSimulation.homeGoals === matchSimulation.awayGoals ? 1 : 0
+            };
+
+            newCareerState.results.unshift(matchResult);
+            newCareerState.news.unshift({
+                title: `Resultado da Liga: ${homeTeam.name} ${matchSimulation.homeGoals} - ${matchSimulation.awayGoals} ${awayTeam.name}`,
+                date: currentDate.toISOString(),
+                type: (matchForToday.isHomeGame ? matchResult.points === 3 : matchResult.points === 0) ? 'positive' : matchResult.points === 1 ? 'neutral' : 'negative'
+            });
+        } else {
+            newCareerState.news.unshift({
+                title: `Dia de treino concluído.`,
+                date: currentDate.toISOString(),
+                type: 'neutral'
+            });
+        }
 
         // --- 1. IA FAZ PROPOSTAS POR SEUS JOGADORES ---
         const listedPlayers = squad.filter(p => newCareerState.transferList.some(item => item.playerId === p.id && item.isListed));
@@ -356,69 +569,6 @@ function useCareerState() {
             }
         }
 
-        // --- 3. OLHEIROS RETORNAM DE MISSÕES ---
-        const completedMissions = newCareerState.scoutMissions.filter(m => new Date(m.endDate) <= currentDate);
-        for (const mission of completedMissions) {
-            const scout = newCareerState.scouts.find(s => s.id === mission.scoutId);
-            if (!scout) continue;
-            scout.status = 'Disponível';
-
-            try {
-                const minPotential = 65 + (scout.rating * 4);
-                let url = `/api/market?excludeClubId=${activeCareer.clubId}&freeAgentsOnly=false&limit=1&minPotential=${minPotential}`;
-                if (mission.country) url += `&country=${encodeURIComponent(mission.country)}`;
-                if (mission.leagueName) url += `&leagueName=${encodeURIComponent(mission.leagueName)}`;
-                if (mission.position) url += `&position=${encodeURIComponent(mission.position)}`;
-
-                const response = await fetch(url);
-                const potentialPlayers: Player[] = await response.json();
-
-                if (potentialPlayers.length > 0) {
-                    const foundPlayer = potentialPlayers[0];
-                    if (!newCareerState.scoutingReports.some(r => r.playerId === foundPlayer.id)) {
-                        newCareerState.scoutingReports.unshift({
-                            playerId: foundPlayer.id, scoutId: scout.id, dateFound: currentDate.toISOString(),
-                            notes: `Encontrado por ${scout.name}.`, playerDetails: foundPlayer,
-                        });
-                        newCareerState.news.unshift({ title: `Relatório de ${scout.name}: ${foundPlayer.name} parece promissor.`, date: currentDate.toISOString(), type: 'positive' });
-                    }
-                }
-            } catch (error) { console.error("Falha ao processar missão de observação:", error); }
-        }
-        newCareerState.scoutMissions = newCareerState.scoutMissions.filter(m => !completedMissions.some(cm => cm.scoutId === m.scoutId));
-
-
-        const dayOfMonth = currentDate.getDate();
-        if (dayOfMonth % 7 === 0) {
-            const playerSquad = await getPlayerSquad();
-            const opponentTeam = { name: "Adversário FC", players: [] };
-
-            const matchSimulation = simulateMatch(
-                { name: newCareerState.clubName, players: playerSquad },
-                opponentTeam
-            );
-
-            const matchResult: MatchResult = {
-                opponent: opponentTeam.name,
-                result: `${matchSimulation.homeGoals}-${matchSimulation.awayGoals}`,
-                competition: "Amigável",
-                home: true,
-                points: matchSimulation.homeGoals > matchSimulation.awayGoals ? 3 : matchSimulation.homeGoals === matchSimulation.awayGoals ? 1 : 0
-            };
-
-            newCareerState.results.unshift(matchResult);
-            newCareerState.news.unshift({
-                title: `Resultado: ${newCareerState.clubName} ${matchResult.result} ${matchResult.opponent}`,
-                date: currentDate.toISOString(),
-                type: matchResult.points === 3 ? 'positive' : matchResult.points === 1 ? 'neutral' : 'negative'
-            });
-        } else {
-            newCareerState.news.unshift({
-                title: `Dia de treino concluído.`,
-                date: currentDate.toISOString(),
-                type: 'neutral'
-            });
-        }
         for (const negotiation of newCareerState.negotiations) {
             // A IA só processa propostas que foram enviadas pelo utilizador
             if (negotiation.status === 'Enviada' && negotiation.initiatedBy === 'user') {
@@ -427,7 +577,6 @@ function useCareerState() {
 
                 // Responde após 2-4 dias
                 if (daysSinceOffer > 2 + Math.random() * 2) {
-                    // CORREÇÃO: Usa o ID do clube correto (o clube da IA) para buscar o plantel
                     const clubToFetchId = negotiation.aiClub.id;
 
                     const playerRes = await fetch(`/api/squad/${clubToFetchId}`);
@@ -459,7 +608,7 @@ function useCareerState() {
         }
 
         saveCareerProgress(newCareerState);
-    }, [activeCareer, squad, getPlayerSquad, saveCareerProgress]);
+    }, [activeCareer, squad, getPlayerSquad, schedule, activeFormation, saveCareerProgress]);
 
     const acceptCounterOffer = (negotiationId: string) => {
         if (!activeCareer) return;
@@ -497,12 +646,12 @@ function useCareerState() {
             ],
             transferList: [],
             loanList: [],
-            scouts: [
-                { id: 1, name: "Jorge Costa", rating: 3, specialty: "Jovens Promessas", status: 'Disponível' }
-            ],
+            youthSquad: [],
+            scouts: [],
             scoutMissions: [],
             scoutingReports: [],
             negotiations: [],
+            activeFormation: null,
         };
 
         const updatedCareers = [...careers, newCareer];
@@ -620,76 +769,126 @@ function useCareerState() {
 
     const sendScoutOnMission = (mission: Omit<ScoutMission, 'endDate' | 'scoutId'> & { scoutId: number }) => {
         if (!activeCareer) return;
+
+        // Encontra o olheiro na lista de olheiros da carreira ativa
+        const scout = activeCareer.scouts.find(s => s.id === mission.scoutId);
+
+        // Valida se o olheiro existe e se está disponível
+        if (!scout || scout.status !== 'Disponível') {
+            alert("Este olheiro não está disponível para uma nova missão.");
+            return;
+        }
+
+        // Custo da missão baseado no rating do olheiro
+        const missionCost = scout.rating * 50000; // Ex: Olheiro 5 estrelas custa 250k
+
+        //Verifica se o clube tem orçamento para a missão
+        if (activeCareer.budget < missionCost) {
+            alert(`Orçamento insuficiente. A missão custa €${missionCost.toLocaleString()} e você tem €${activeCareer.budget.toLocaleString()}.`);
+            return;
+        }
+
+        // Cria uma cópia segura do estado da carreira para fazer modificações
         const newCareerState = { ...activeCareer };
 
-        const scout = newCareerState.scouts.find(s => s.id === mission.scoutId);
-        if (scout && scout.status === 'Disponível') {
-            // Mapeamento de rating para duração em dias
-            const durationMap: { [key: number]: number } = {
-                1: 30, // 1 estrela = 30 dias
-                2: 21, // 2 estrelas = 21 dias
-                3: 14, // 3 estrelas = 14 dias
-                4: 10, // 4 estrelas = 10 dias
-                5: 7,  // 5 estrelas = 7 dias
-            };
+        // Deduz o custo do orçamento
+        newCareerState.budget -= missionCost;
 
-            const durationInDays = durationMap[scout.rating] || 30; // Usa 30 como padrão
+        // Encontra o mesmo olheiro na cópia do estado para modificar seu status
+        const scoutInState = newCareerState.scouts.find(s => s.id === mission.scoutId)!;
+        scoutInState.status = 'Observando';
 
-            const endDate = new Date(newCareerState.currentDate);
-            endDate.setDate(endDate.getDate() + durationInDays);
-
-            scout.status = 'Observando';
-            newCareerState.scoutMissions.push({
-                endDate: endDate.toISOString(),
-                ...mission,
-            });
-
-            newCareerState.news.unshift({
-                title: `${scout.name} foi enviado para observar em ${mission.region || 'geral'}. Retorna em ${durationInDays} dias.`,
-                date: new Date().toISOString(),
-                type: 'neutral'
-            });
-
-            saveCareerProgress(newCareerState);
+        // Define a duração e a data de retorno da missão
+        let durationInDays = 30;
+        if (mission.type === 'senior') {
+            durationInDays = 14;
         }
+
+        const endDate = new Date(newCareerState.currentDate);
+        endDate.setDate(endDate.getDate() + durationInDays);
+
+        // Adiciona a missão à lista de missões ativas
+        newCareerState.scoutMissions.push({
+            endDate: endDate.toISOString(),
+            ...mission,
+        });
+
+        // Mensagem de notícia, incluindo o custo
+        const destination = mission.country || mission.leagueName || 'uma missão internacional';
+        newCareerState.news.unshift({
+            title: `${scout.name} foi enviado para ${destination} por €${formatCompactNumber(missionCost)}. Retorna em ${durationInDays} dias.`,
+            date: new Date().toISOString(),
+            type: 'neutral'
+        });
+
+        // Salva o estado atualizado do jogo
+        saveCareerProgress(newCareerState);
+
+        // Atualiza o estado local para a UI refletir a mudança imediatamente
+        setScouts([...newCareerState.scouts]);
     };
 
     const recallScout = (scoutId: number) => {
         if (!activeCareer) return;
-        const newCareerState = { ...activeCareer };
-        const scout = newCareerState.scouts.find(s => s.id === scoutId);
 
-        if (scout && scout.status === 'Observando') {
-            scout.status = 'Disponível';
-            // Remove a missão associada
-            newCareerState.scoutMissions = newCareerState.scoutMissions.filter(m => m.scoutId !== scoutId);
+        const scoutToRecall = activeCareer.scouts.find(s => s.id === scoutId);
+        if (!scoutToRecall || scoutToRecall.status !== 'Observando') return;
 
-            newCareerState.news.unshift({
-                title: `${scout.name} foi chamado de volta e está agora disponível.`,
-                date: new Date().toISOString(),
-                type: 'neutral'
-            });
-            saveCareerProgress(newCareerState);
-        }
+        const updatedScouts = activeCareer.scouts.map(scout => {
+            // Se este não for o olheiro, retorna o olheiro original sem alterações
+            if (scout.id !== scoutId) {
+                return scout;
+            }
+            // Se for o olheiro correto, retorna um *novo objeto* com o status alterado
+            return { ...scout, status: 'Disponível' as const };
+        });
+
+        const updatedMissions = activeCareer.scoutMissions.filter(m => m.scoutId !== scoutId);
+
+        const newCareerState: CareerSave = {
+            ...activeCareer,
+            scouts: updatedScouts,
+            scoutMissions: updatedMissions,
+            news: [
+                {
+                    title: `${scoutToRecall.name} foi chamado de volta e está agora disponível.`,
+                    date: new Date().toISOString(),
+                    type: 'neutral' as const
+                },
+                ...activeCareer.news
+            ]
+        };
+
+        saveCareerProgress(newCareerState);
+        setScouts(newCareerState.scouts);
     };
 
     const fireScout = (scoutId: number) => {
         if (!activeCareer || !confirm("Tem a certeza que deseja demitir este olheiro?")) return;
-        const newCareerState = { ...activeCareer };
-        const scout = newCareerState.scouts.find(s => s.id === scoutId);
 
-        if (scout) {
-            newCareerState.scouts = newCareerState.scouts.filter(s => s.id !== scoutId);
-            // Remove também qualquer missão que ele possa ter
-            newCareerState.scoutMissions = newCareerState.scoutMissions.filter(m => m.scoutId !== scoutId);
+        const scout = activeCareer.scouts.find(s => s.id === scoutId);
+        if (!scout) return;
 
-            newCareerState.news.unshift({
-                title: `${scout.name} foi demitido da equipa de observação.`,
-                date: new Date().toISOString(),
-                type: 'negative'
-            });
-            saveCareerProgress(newCareerState);
-        }
+        // .filter() já cria novos arrays, o que é imutável e correto
+        const updatedScouts = activeCareer.scouts.filter(s => s.id !== scoutId);
+        const updatedMissions = activeCareer.scoutMissions.filter(m => m.scoutId !== scoutId);
+
+        const newCareerState: CareerSave = {
+            ...activeCareer,
+            scouts: updatedScouts,
+            scoutMissions: updatedMissions,
+            news: [
+                {
+                    title: `${scout.name} foi demitido da equipa de observação.`,
+                    date: new Date().toISOString(),
+                    type: 'negative' as const
+                },
+                ...activeCareer.news
+            ]
+        };
+
+        saveCareerProgress(newCareerState);
+        setScouts(newCareerState.scouts);
     };
 
     const hireScout = (scout: Scout) => {
@@ -697,16 +896,24 @@ function useCareerState() {
             alert("Atingiu o limite máximo de 5 olheiros.");
             return;
         }
-        const newCareerState = { ...activeCareer };
-        const newScout = { ...scout, status: 'Disponível' as const };
-        newCareerState.scouts.push(newScout);
 
-        newCareerState.news.unshift({
-            title: `O olheiro ${scout.name} foi contratado para a sua equipa!`,
-            date: new Date().toISOString(),
-            type: 'positive'
-        });
+        const newCareerState: CareerSave = {
+            ...activeCareer,
+            // Em vez de .push(), criamos um novo array com o olheiro adicionado
+            scouts: [...activeCareer.scouts, scout],
+            news: [
+                {
+                    title: `O olheiro ${scout.name} foi contratado para a sua equipa!`,
+                    date: new Date().toISOString(),
+                    type: 'positive' as const
+                },
+                ...activeCareer.news
+            ]
+        };
+
         saveCareerProgress(newCareerState);
+        // Atualiza o estado local com o novo array
+        setScouts(newCareerState.scouts);
     };
 
     // Lógica para encontrar o clube e a liga a partir do estado ativo
@@ -729,6 +936,8 @@ function useCareerState() {
         hasCareer: !!activeCareer,
         isLoading,
         careers,
+        schedule,
+        youthSquad,
         loadCareer,
         startNewCareer,
         deleteCareer,
@@ -751,7 +960,10 @@ function useCareerState() {
         squad,
         acceptAiOffer,
         rejectAiOffer,
-
+        activeFormation,
+        updateFormation,
+        signYouthPlayer,
+        scouts,
     };
 }
 
