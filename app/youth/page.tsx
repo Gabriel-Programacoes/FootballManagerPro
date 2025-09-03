@@ -35,7 +35,9 @@ export default function YouthAcademyPage() {
         activeCareer,
         scouts,
         hireScout,
-        sendScoutOnMission
+        startContractNegotiation,
+        sendScoutOnMission,
+        signYouthPlayer
     } = useCareer();
 
     const [selectedYouthPlayer, setSelectedYouthPlayer] = useState<YouthPlayer | null>(null);
@@ -143,7 +145,7 @@ export default function YouthAcademyPage() {
                                                     </div>
                                                     <div className="flex items-center gap-2 self-end sm:self-center">
                                                         <Button variant="outline" size="sm" onClick={() => setSelectedYouthPlayer(player)}><Eye className="h-4 w-4 mr-1"/> Ver Análise</Button>
-                                                        <Button size="sm">Promover</Button>
+                                                        <Button size="sm" onClick={() => startContractNegotiation(player)}>Promover</Button>
                                                     </div>
                                                 </div>
                                                 <div className="space-y-2 mt-3">
@@ -262,7 +264,7 @@ export default function YouthAcademyPage() {
                                                     <p className="font-semibold text-sm text-green-500">€{formatCompactNumber(signingCost)}</p>
                                                     <Button
                                                         size="sm"
-                                                        // Desabilita o botão se o orçamento for insuficiente
+                                                        onClick={() => signYouthPlayer(report.reportId)}
                                                         disabled={(activeCareer?.budget || 0) < signingCost}
                                                     >
                                                         <Plus className="h-4 w-4 mr-1"/> Assinar para Academia

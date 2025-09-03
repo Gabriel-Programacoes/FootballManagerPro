@@ -20,13 +20,13 @@ function createYouthPlayer(scoutRating: number, country: string): YouthPlayer {
     const randomChance = Math.random();
     const ratingBonus = scoutRating / 50; // Olheiro 5 estrelas dá um bónus de 2.5%
 
-    if (randomChance < 0.02 + ratingBonus) { // Apenas 2% a 7% de chance de ser um talento geracional
+    if (randomChance < 0.02 + ratingBonus) { // Apenas 2% a 4.5% de chance de ser um talento geracional
         potentialMin = getRandomNumber(88, 92);
         potentialMax = getRandomNumber(93, 95);
-    } else if (randomChance < 0.15 + ratingBonus) { // 15% a 20% de chance de ser um talento de alta qualidade
+    } else if (randomChance < 0.15 + ratingBonus) { // 15% a 17.5% de chance de ser um talento de alta qualidade
         potentialMin = getRandomNumber(82, 87);
         potentialMax = getRandomNumber(88, 92);
-    } else if (randomChance < 0.50 + ratingBonus) { // 50% a 55% de chance de ser um bom jogador
+    } else if (randomChance < 0.50 + ratingBonus) { // 50% a 52.5% de chance de ser um bom jogador
         potentialMin = getRandomNumber(75, 81);
         potentialMax = getRandomNumber(82, 87);
     } else { // O resto são jogadores medianos

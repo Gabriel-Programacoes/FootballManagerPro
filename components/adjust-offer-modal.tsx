@@ -31,7 +31,12 @@ export function AdjustOfferModal({ negotiation, squad, isOpen, onOpenChange, onC
         // Pré-preenche o formulário com os dados da última oferta
         if (negotiation) {
             const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
-            setOfferValue(String(lastOffer.value / 1_000_000)); // Converte de volta para milhões
+
+            if (lastOffer && typeof lastOffer.value === 'number') {
+                setOfferValue(String(lastOffer.value / 1_000_000));
+            } else {
+                setOfferValue("0");
+            }
             setSwapPlayerId(lastOffer.swapPlayerId || "none");
             setSellOnClause([lastOffer.sellOnClause || 0]);
         }

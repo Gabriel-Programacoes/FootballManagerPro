@@ -42,7 +42,7 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
                             </Avatar>
                             <div>
                                 <DialogTitle className="text-2xl">Detalhes da Negociação</DialogTitle>
-                                <DialogDescription>Proposta por {negotiation.playerName} ({negotiation.aiClub.name})</DialogDescription>
+                                <DialogDescription>Proposta por {negotiation.playerName} {negotiation.aiClub ? `(${negotiation.aiClub.name})` : '(Contrato Profissional)'}</DialogDescription>
                             </div>
                         </div>
                     </DialogHeader>
@@ -61,10 +61,12 @@ export function NegotiationDetailModal({ negotiation, isOpen, onOpenChange }: Ne
                                         <div key={index}>
                                             <p className="font-semibold mb-1.5 border-b pb-1">{index % 2 === 0 ? "Sua Oferta" : "Contra-Proposta do Clube"}</p>
                                             <div className="space-y-1 text-muted-foreground">
-                                                <div className="flex items-center gap-2">
-                                                    <DollarSign className="h-4 w-4 text-green-500" />
-                                                    <span>Valor: <span className="font-mono text-foreground">€ {formatCompactNumber(offer.value)}</span></span>
-                                                </div>
+                                                {typeof offer.value === 'number' && (
+                                                    <div className="flex items-center gap-2">
+                                                        <DollarSign className="h-4 w-4 text-green-500" />
+                                                        <span>Valor: <span className="font-mono text-foreground">€ {formatCompactNumber(offer.value)}</span></span>
+                                                    </div>
+                                                )}
                                                 {swapPlayer && (
                                                     <div className="flex items-center gap-2">
                                                         <Repeat className="h-4 w-4 text-blue-500" />

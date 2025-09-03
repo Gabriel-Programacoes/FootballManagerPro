@@ -17,11 +17,21 @@ interface NegotiationUpdate {
  * @returns Uma atualização para o estado da negociação.
  */
 export function processNegotiation(negotiation: Negotiation, player: Player): NegotiationUpdate {
-    const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1].value;
+    const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
+
+    if (!lastOffer || negotiation.negotiationType !== 'transfer' || typeof lastOffer.value !== 'number') {
+        // Se alguma condição falhar, rejeita a negociação como uma medida de segurança.
+        return {
+            status: 'Rejeitada',
+            reason: `A proposta por ${player.name} era inválida ou não era uma oferta de transferência.`
+        };
+    }
+
+    const offerValue = lastOffer.value;
     const marketValue = player.contract.value;
 
     // Fator 1: A oferta vs. o valor de mercado
-    const offerRatio = lastOffer / marketValue;
+    const offerRatio = offerValue / marketValue;
 
     // Fator 2: Importância do jogador para o clube (Overall)
     const isKeyPlayer = player.overall > 82;
@@ -61,7 +71,7 @@ export function processNegotiation(negotiation: Negotiation, player: Player): Ne
     counterOfferValue *= (1 + (Math.random() * 0.1 - 0.05)); // Variação de +/- 5%
 
     // Se a última oferta for maior ou igual à contra-proposta calculada, aceita.
-    if (lastOffer >= counterOfferValue) {
+    if (offerValue >= counterOfferValue) {
         return {
             status: 'Aceite',
             reason: `Após negociação, a proposta por ${player.name} foi aceita.`
@@ -70,10 +80,13 @@ export function processNegotiation(negotiation: Negotiation, player: Player): Ne
 
     // Se a oferta é boa mas não o suficiente, faz uma contra-proposta
     if (offerRatio > 0.8) {
+
+        const clubName = negotiation.aiClub ? negotiation.aiClub.name : 'O jogador';
+
         return {
             status: 'Contraproposta', // USA O NOVO PADRÃO
             counterOffer: Math.ceil(player.contract.value * 1.1),
-            reason: `${negotiation.aiClub.name} fez uma contraproposta por ${player.name}.`
+            reason: `${clubName} fez uma contraproposta por ${player.name}.`
         };
     }
 

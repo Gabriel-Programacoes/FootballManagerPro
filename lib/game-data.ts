@@ -64,21 +64,27 @@ export interface ScoutingReport {
 }
 
 export interface Offer {
-    value: number;
+    value?: number;
     swapPlayerId?: string;
     sellOnClause?: number;
     date: string;
     offeredBy: 'user' | 'ai';
+    wage?: number;
+    contractLength?: number;
+    squadRole?: 'Estrela' | 'Titular' | 'Rotação' | 'Jovem Promessa';
 }
 
 export interface Negotiation {
     id: string;
+    negotiationType: 'transfer' | 'contract';
     initiatedBy: 'user' | 'ai';
+
     playerId: string;
     playerName: string;
     playerOverall: number;
+
     myClubId: string;
-    aiClub: {
+    aiClub?: {
         id: string;
         name: string;
     };
@@ -105,6 +111,7 @@ export interface CareerSave {
     scoutingReports: ScoutingReport[];
     activeFormation: Formation | null;
     youthSquad: YouthPlayer[];
+    squad: Player[];
 }
 
 export interface YouthPlayer {

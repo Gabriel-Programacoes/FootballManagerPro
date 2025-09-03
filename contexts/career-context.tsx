@@ -33,6 +33,7 @@ interface CareerContextType {
     activeFormation: Formation | null;
     updateFormation: (formation: Formation) => void;
     signYouthPlayer: (reportId: string) => void;
+    startContractNegotiation: (player: YouthPlayer) => void;
     youthSquad: YouthPlayer[];
     scouts: Scout[];
 
@@ -73,6 +74,9 @@ const CareerContext = createContext<CareerContextType | undefined>(undefined);
 
 // --- HOOK DE ESTADO INTERNO ---
 function useCareerState() {
+
+    const [negotiations, setNegotiations] = useState<Negotiation[]>([]);
+
     const router = useRouter();
     const [careers, setCareers] = useState<CareerSave[]>([]);
     const [activeCareer, setActiveCareer] = useState<CareerSave | null>(null);
@@ -84,7 +88,7 @@ function useCareerState() {
     const [activeFormation, setActiveFormation] = useState<Formation | null>(null);
     const [youthSquad, setYouthSquad] = useState<YouthPlayer[]>([]);
     const [scouts, setScouts] = useState<Scout[]>([]);
-
+    const [scoutingReports, setScoutingReports] = useState<ScoutingReport[]>([]);
 
 
     const getPlayerSquad = useCallback(async (): Promise<Player[]> => {
@@ -151,6 +155,7 @@ function useCareerState() {
                         scoutMissions: career.scoutMissions || [],
                         scoutingReports: career.scoutingReports || [],
                         youthSquad: career.youthSquad || [],
+                        squad: career.squad || [],
                     }));
 
                     setCareers(parsedCareers);
@@ -191,6 +196,7 @@ function useCareerState() {
             return updatedCareers;
         });
 
+        setScoutingReports(activeCareer?.scoutingReports || [])
         setActiveCareer(updatedCareer);
     }, [activeCareerIndex]);
 
@@ -285,7 +291,7 @@ function useCareerState() {
         const deadline = new Date();
         deadline.setDate(deadline.getDate() + 14);
         newCareerState.negotiations.push({
-            id: `neg_${Date.now()}`, initiatedBy: 'user', playerId: player.id, playerName: player.name, playerOverall: player.overall,
+            id: `neg_${Date.now()}`, negotiationType: 'transfer', initiatedBy: 'user', playerId: player.id, playerName: player.name, playerOverall: player.overall,
             myClubId: activeCareer.clubId, aiClub: { id: player.attributes.profile.team, name: player.attributes.profile.team },
             status: 'Enviada', offerHistory: [{ ...initialOffer, date: new Date().toISOString(), offeredBy: 'user' }],
             deadline: deadline.toISOString(),
@@ -349,25 +355,79 @@ function useCareerState() {
         const potentialMidPoint = (report.player.potential[0] + report.player.potential[1]) / 2;
         const signingCost = Math.floor((potentialMidPoint * 1000) + (report.player.overall * 500));
 
-        // Verifica se há orçamento suficiente
         if (activeCareer.budget < signingCost) {
             alert(`Orçamento insuficiente! Contratar ${report.player.name} custa €${signingCost.toLocaleString()}.`);
             return;
         }
 
+        // Cria um novo objeto de carreira em vez de modificar o antigo
+        const newCareerState: CareerSave = {
+            ...activeCareer,
+            budget: activeCareer.budget - signingCost, // Deduz o custo
+            // Cria um novo array para a academia com o novo jogador
+            youthSquad: [...activeCareer.youthSquad, report.player],
+            // Cria um novo array de relatórios sem o que foi usado
+            scoutingReports: activeCareer.scoutingReports.filter(r => r.reportId !== reportId),
+            news: [
+                {
+                    title: `${report.player.name} foi contratado para a academia por €${formatCompactNumber(signingCost)}.`,
+                    date: new Date().toISOString(),
+                    type: 'positive'
+                },
+                ...activeCareer.news
+            ]
+        };
+
+        saveCareerProgress(newCareerState);
+        // Atualiza o estado local para a UI refletir a mudança imediatamente
+        setYouthSquad(newCareerState.youthSquad);
+        setScoutingReports(newCareerState.scoutingReports);
+    };
+
+    const getRandomNumber = (min: number, max: number) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+    const startContractNegotiation = (player: YouthPlayer) => {
+        if (!activeCareer) return;
+
+        // Verifica se já existe uma negociação de contrato para este jogador
+        const existingNegotiation = activeCareer.negotiations.find(
+            n => n.playerId === player.id && n.negotiationType === 'contract'
+        );
+        if (existingNegotiation) {
+            alert("Você já está a negociar um contrato com este jogador.");
+            return;
+        }
+
         const newCareerState = { ...activeCareer };
-        // Adiciona o jogador à academia
-        newCareerState.youthSquad.push(report.player);
-        // Remove o relatório da lista de disponíveis
-        newCareerState.scoutingReports = newCareerState.scoutingReports.filter(r => r.reportId !== reportId);
+        const deadline = new Date(newCareerState.currentDate);
+        deadline.setDate(deadline.getDate() + 21); // 3 semanas para negociar
+
+        // Cria a nova negociação de contrato
+        const newNegotiation: Negotiation = {
+            id: `neg_contract_${player.id}_${Date.now()}`,
+            negotiationType: 'contract',
+            initiatedBy: 'user',
+            playerId: player.id,
+            playerName: player.name,
+            playerOverall: player.overall,
+            myClubId: activeCareer.clubId,
+            status: 'Recebida', // 'Recebida' porque você precisa de fazer a primeira oferta
+            offerHistory: [], // Começa vazia, a sua primeira oferta será adicionada
+            deadline: deadline.toISOString(),
+        };
+
+        newCareerState.negotiations.push(newNegotiation);
 
         newCareerState.news.unshift({
-            title: `${report.player.name} foi contratado para a academia por €${formatCompactNumber(signingCost)}.`,
+            title: `Você iniciou as negociações do primeiro contrato profissional com ${player.name}.`,
             date: new Date().toISOString(),
-            type: 'positive'
+            type: 'neutral' as const
         });
+
         saveCareerProgress(newCareerState);
-        setYouthSquad([...newCareerState.youthSquad]);
+
+        // Idealmente, aqui você abriria o modal de negociação de contrato.
+        // Por enquanto, a negociação aparecerá na sua Central de Transferências.
     };
 
     const advanceTime = useCallback(async () => {
@@ -442,6 +502,7 @@ function useCareerState() {
                                 physical: foundPlayer.attributes.physical.strength,
                             },
                             traits: [],
+                            nationality: foundPlayer.attributes.profile.nation,
                         };
 
                         // Verifica se já não existe um relatório para este jogador
@@ -520,6 +581,7 @@ function useCareerState() {
 
                 newCareerState.negotiations.push({
                     id: `neg_${Date.now()}_${player.id}`,
+                    negotiationType: 'transfer',
                     initiatedBy: 'ai',
                     playerId: player.id,
                     playerName: player.name,
@@ -542,27 +604,29 @@ function useCareerState() {
                     const daysSinceOffer = (currentDate.getTime() - new Date(lastOffer.date).getTime()) / (1000 * 3600 * 24);
 
                     if (daysSinceOffer > 2 + Math.random() * 2) {
-                        const clubToFetchId = negotiation.aiClub.id;
 
-                        if (clubToFetchId !== 'free_agent') {
-                            const playerRes = await fetch(`/api/squad/${clubToFetchId}`);
-                            if (!playerRes.ok) continue;
+                        if (negotiation.aiClub) {
+                            const clubToFetchId = negotiation.aiClub.id;
 
-                            const clubSquad: Player[] = await playerRes.json();
-                            const playerToProcess = clubSquad.find(p => p.id === negotiation.playerId);
+                            if (clubToFetchId !== 'free_agent') {
+                                const playerRes = await fetch(`/api/squad/${clubToFetchId}`);
+                                if (!playerRes.ok) continue;
 
-                            if (playerToProcess) {
-                                const result = processNegotiation(negotiation, playerToProcess);
-                                negotiation.status = result.status;
-                                if (result.status === 'Contraproposta' && result.counterOffer) {
-                                    negotiation.offerHistory.push({ value: result.counterOffer, date: currentDate.toISOString(), offeredBy: 'ai' });
+                                const clubSquad: Player[] = await playerRes.json();
+                                const playerToProcess = clubSquad.find(p => p.id === negotiation.playerId);
+
+                                if (playerToProcess) {
+                                    const result = processNegotiation(negotiation, playerToProcess);
+                                    negotiation.status = result.status;
+                                    if (result.status === 'Contraproposta' && result.counterOffer) {
+                                        negotiation.offerHistory.push({ value: result.counterOffer, date: currentDate.toISOString(), offeredBy: 'ai' });
+                                    }
+                                    newCareerState.news.unshift({ title: result.reason, date: currentDate.toISOString(), type: result.status === 'Aceite' ? 'positive' : result.status === 'Rejeitada' ? 'negative' : 'neutral' });
                                 }
-                                newCareerState.news.unshift({ title: result.reason, date: currentDate.toISOString(), type: result.status === 'Aceite' ? 'positive' : result.status === 'Rejeitada' ? 'negative' : 'neutral' });
+                            } else {
+                                negotiation.status = 'Aceite';
+                                newCareerState.news.unshift({ title: `${negotiation.playerName} aceitou os termos do seu contrato.`, date: currentDate.toISOString(), type: 'positive' });
                             }
-                        } else {
-                            // Lógica para Agentes Livres (geralmente aceitam se o salário for bom)
-                            negotiation.status = 'Aceite';
-                            newCareerState.news.unshift({ title: `${negotiation.playerName} aceitou os termos do seu contrato.`, date: currentDate.toISOString(), type: 'positive' });
                         }
                     }
                 }
@@ -571,16 +635,23 @@ function useCareerState() {
 
         for (const negotiation of newCareerState.negotiations) {
             // A IA só processa propostas que foram enviadas pelo utilizador
-            if (negotiation.status === 'Enviada' && negotiation.initiatedBy === 'user') {
+            // CORREÇÃO: Adicionada verificação para garantir que é uma negociação de transferência e que aiClub existe
+            if (
+                negotiation.status === 'Enviada' &&
+                negotiation.initiatedBy === 'user' &&
+                negotiation.negotiationType === 'transfer' &&
+                negotiation.aiClub // Garante que aiClub não é undefined
+            ) {
                 const lastOfferDate = new Date(negotiation.offerHistory[negotiation.offerHistory.length - 1].date);
                 const daysSinceOffer = (currentDate.getTime() - lastOfferDate.getTime()) / (1000 * 3600 * 24);
 
                 // Responde após 2-4 dias
                 if (daysSinceOffer > 2 + Math.random() * 2) {
+                    // Agora é seguro aceder a .id porque já verificámos que negotiation.aiClub existe
                     const clubToFetchId = negotiation.aiClub.id;
 
                     const playerRes = await fetch(`/api/squad/${clubToFetchId}`);
-                    if (!playerRes.ok) continue; // Pula para a próxima negociação se houver um erro
+                    if (!playerRes.ok) continue;
 
                     const clubSquad: Player[] = await playerRes.json();
                     const playerToProcess = clubSquad.find(p => p.id === negotiation.playerId);
@@ -652,6 +723,7 @@ function useCareerState() {
             scoutingReports: [],
             negotiations: [],
             activeFormation: null,
+            squad: [],
         };
 
         const updatedCareers = [...careers, newCareer];
@@ -671,29 +743,38 @@ function useCareerState() {
         const newCareerState = { ...activeCareer };
         const negotiation = newCareerState.negotiations.find(n => n.id === negotiationId);
 
-        if (negotiation && negotiation.initiatedBy === 'ai') {
+        // Garante que a negociação existe, foi iniciada pela IA e é uma transferência
+        if (negotiation && negotiation.initiatedBy === 'ai' && negotiation.negotiationType === 'transfer') {
             const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
 
-            // 1. Adiciona o valor da venda ao orçamento
-            newCareerState.budget += lastOffer.value;
+            // CORREÇÃO APLICADA AQUI:
+            // Verifica se a última oferta existe e se a propriedade 'value' é um número válido.
+            if (lastOffer && typeof lastOffer.value === 'number') {
+                // 1. Adiciona o valor da venda ao orçamento
+                newCareerState.budget += lastOffer.value;
 
-            // 2. Remove o jogador do seu plantel
-            setSquad(squad => squad.filter(p => p.id !== negotiation.playerId));
+                // 2. Remove o jogador do seu plantel
+                // (Esta lógica precisa ser aprimorada para remover de 'newCareerState.squad')
+                const updatedSquad = newCareerState.squad.filter(p => p.id !== negotiation.playerId);
+                newCareerState.squad = updatedSquad;
 
-            // 3. Remove a negociação da lista de ativas
-            newCareerState.negotiations = newCareerState.negotiations.filter(n => n.id !== negotiationId);
+                // 3. Remove a negociação da lista de ativas
+                newCareerState.negotiations = newCareerState.negotiations.filter(n => n.id !== negotiationId);
 
-            // 4. Cria a notícia da transferência
-            newCareerState.news.unshift({
-                title: `${negotiation.playerName} foi transferido para ${negotiation.aiClub.name} por €${formatCompactNumber(lastOffer.value)}.`,
-                date: new Date().toISOString(),
-                type: 'positive'
-            });
+                // 4. Cria a notícia da transferência
+                newCareerState.news.unshift({
+                    title: `${negotiation.playerName} foi transferido para ${negotiation.aiClub?.name || 'outro clube'} por €${formatCompactNumber(lastOffer.value)}.`,
+                    date: new Date().toISOString(),
+                    type: 'positive'
+                });
 
-            // 5. Remove o jogador da sua lista de transferências
-            newCareerState.transferList = newCareerState.transferList.filter(item => item.playerId !== negotiation.playerId);
+                // 5. Remove o jogador da sua lista de transferências
+                newCareerState.transferList = newCareerState.transferList.filter(item => item.playerId !== negotiation.playerId);
 
-            saveCareerProgress(newCareerState);
+                saveCareerProgress(newCareerState);
+                // Atualiza o estado local do plantel
+                setSquad(updatedSquad);
+            }
         }
     };
 
@@ -706,14 +787,18 @@ function useCareerState() {
             // Apenas remove a negociação da lista
             newCareerState.negotiations = newCareerState.negotiations.filter(n => n.id !== negotiationId);
 
+            const clubName = negotiation.aiClub ? negotiation.aiClub.name : 'A proposta';
+
+
             // Adiciona uma notícia a informar da rejeição
             newCareerState.news.unshift({
-                title: `Proposta de ${negotiation.aiClub.name} por ${negotiation.playerName} foi rejeitada.`,
+                title: `Proposta de ${clubName} por ${negotiation.playerName} foi rejeitada.`,
                 date: new Date().toISOString(),
                 type: 'neutral'
             });
 
             saveCareerProgress(newCareerState);
+            setNegotiations(newCareerState.negotiations);
         }
     };
 
@@ -964,6 +1049,7 @@ function useCareerState() {
         updateFormation,
         signYouthPlayer,
         scouts,
+        startContractNegotiation,
     };
 }
 

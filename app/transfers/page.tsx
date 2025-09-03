@@ -515,22 +515,32 @@ export default function TransfersPage() {
                                                 <Card key={neg.id} className="shadow-none border cursor-pointer hover:border-primary/50" onClick={() => setNegotiationForDetail(neg)}>
                                                     <CardContent className="p-4 grid grid-cols-1 sm:grid-cols-3 items-center gap-4">
                                                         {/* Coluna 1: Jogador e Clube */}
+
                                                         <div className="flex items-center gap-3">
                                                             <Avatar className="h-10 w-10">
                                                                 <AvatarFallback>{neg.playerName.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                                                             </Avatar>
                                                             <div>
                                                                 <p className="font-bold">{neg.playerName}</p>
-                                                                <p className="text-sm text-muted-foreground">de {neg.aiClub.name}</p>
+                                                                <p className="text-sm text-muted-foreground">
+                                                                    {/* Verifica se é uma transferência ou contrato para exibir a informação correta.
+    */}
+                                                                    {neg.negotiationType === 'transfer' && neg.aiClub
+                                                                        ? `de ${neg.aiClub.name}`
+                                                                        : 'Contrato com Jovem Promessa'}
+                                                                </p>
                                                             </div>
                                                         </div>
 
                                                         {/* Coluna 2: Detalhes da Proposta */}
                                                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
-                                                            <div className="flex items-center gap-1.5" title="Valor em dinheiro">
-                                                                <DollarSign className="h-4 w-4 text-green-500"/>
-                                                                <span className="font-semibold">€ {formatCompactNumber(lastOffer.value)}</span>
-                                                            </div>
+
+                                                            {typeof lastOffer.value === 'number' && (
+                                                                <div className="flex items-center gap-1.5" title="Valor em dinheiro">
+                                                                    <DollarSign className="h-4 w-4 text-green-500"/>
+                                                                    <span className="font-semibold">€ {formatCompactNumber(lastOffer.value)}</span>
+                                                                </div>
+                                                            )}
                                                             {swapPlayer && (
                                                                 <div className="flex items-center gap-1.5" title={`Troca: ${swapPlayer.name}`}>
                                                                     <Repeat className="h-4 w-4 text-blue-500"/>
