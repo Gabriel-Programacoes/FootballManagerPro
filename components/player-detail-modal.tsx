@@ -28,6 +28,7 @@ import { useCareer } from "@/contexts/career-context";
 import { ListTransferModal } from "./list-transfer-modal";
 import { ListLoanModal } from "./list-loan-modal";
 import { LoanListing } from "@/lib/game-data";
+import { toast } from "sonner";
 
 interface PlayerDetailModalProps {
     player: Player | null;
@@ -79,12 +80,15 @@ export function PlayerDetailModal({ player, isOpen, onOpenChange }: PlayerDetail
     if (!player) return null;
 
     const handleListForTransfer = (playerId: string, askingPrice: number) => {
-        listPlayerForTransfer(playerId, askingPrice);
-        // Adicionar feedback visual aqui (ex: um "toast") seria uma boa melhoria futura.
+        listPlayerForTransfer(playerId, askingPrice, player);
+        toast.success(`${player.name} está disponível no mercado de transferências.`, {
+            description: `Preço pedido: € ${formatCompactNumber(askingPrice)}`,
+        });
     };
 
     const handleListForLoan = (playerId: string, conditions: Omit<LoanListing, 'playerId' | 'isListed'>) => {
-        listPlayerForLoan(playerId, conditions);
+        listPlayerForLoan(playerId, conditions, player);
+        toast.success(`${player.name} está disponível para receber propostas de empréstimos.`);
     };
 
     const getPositionColor = (position: Player['position']) => {

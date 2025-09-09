@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Trophy, Search, Users, ArrowLeft, ChevronRight, Award, Loader2 } from "lucide-react"; // Importamos um ícone de Loading
 import { useCareer } from "@/contexts/career-context";
 import { ClubDetailModal } from "@/components/club-detail-modal";
+import { toast } from "sonner";
 
 // --- NOVAS INTERFACES ---
 // Definimos a "forma" dos dados que esperamos receber da nossa API.

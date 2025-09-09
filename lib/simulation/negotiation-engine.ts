@@ -1,7 +1,7 @@
 // lib/simulation/negotiation-engine.ts
 
 import { Player } from "@/app/squad/page";
-import { Negotiation } from "@/lib/game-data";
+import { Negotiation, Offer, YouthPlayer } from "@/lib/game-data";
 
 // O resultado do processamento da IA
 interface NegotiationUpdate {
@@ -10,12 +10,11 @@ interface NegotiationUpdate {
     reason: string;
 }
 
-/**
- * Simula a resposta de um clube de IA a uma proposta de transferência.
- * @param negotiation O estado atual da negociação.
- * @param player O jogador que está a ser negociado.
- * @returns Uma atualização para o estado da negociação.
- */
+interface YouthNegotiationUpdate {
+    status: 'Aceite' | 'Rejeitada' | 'Contraproposta';
+    counterOffer?: Partial<Offer>;
+    reason: string;
+}
 export function processNegotiation(negotiation: Negotiation, player: Player): NegotiationUpdate {
     const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
 
@@ -59,19 +58,19 @@ export function processNegotiation(negotiation: Negotiation, player: Player): Ne
     }
 
     // 3. Negociação com base nos fatores
-    let counterOfferValue = marketValue;
+    let fairValue = marketValue;
 
-    if (isKeyPlayer) counterOfferValue *= 1.6; // Jogadores chave são caros
-    else if (isImportantPlayer) counterOfferValue *= 1.3;
+    if (isKeyPlayer) fairValue *= 1.6; // Jogadores chave são caros
+    else if (isImportantPlayer) fairValue *= 1.3;
 
-    if (hasHighPotential) counterOfferValue *= 1.4; // Potencial custa caro
-    if (player.age < 21) counterOfferValue *= 1.2; // Jovens são mais valorizados
+    if (hasHighPotential) fairValue *= 1.4; // Potencial custa caro
+    if (player.age < 21) fairValue *= 1.2; // Jovens são mais valorizados
 
     // Adiciona uma pequena variação para não ser sempre o mesmo valor
-    counterOfferValue *= (1 + (Math.random() * 0.1 - 0.05)); // Variação de +/- 5%
+    fairValue *= (1 + (Math.random() * 0.1 - 0.05)); // Variação de +/- 5%
 
     // Se a última oferta for maior ou igual à contra-proposta calculada, aceita.
-    if (offerValue >= counterOfferValue) {
+    if (offerValue >= fairValue) {
         return {
             status: 'Aceite',
             reason: `Após negociação, a proposta por ${player.name} foi aceita.`
@@ -95,4 +94,58 @@ export function processNegotiation(negotiation: Negotiation, player: Player): Ne
         status: 'Rejeitada',
         reason: `A proposta por ${player.name} não agradou a direção.`
     };
+}
+
+export function processYouthContractNegotiation(negotiation: Negotiation, player: YouthPlayer): YouthNegotiationUpdate {
+    const lastOffer = negotiation.offerHistory[negotiation.offerHistory.length - 1];
+    if (!lastOffer || typeof lastOffer.wage !== 'number') {
+        return { status: 'Rejeitada', reason: "Proposta inválida recebida.", counterOffer: undefined };
+    }
+
+    // Calcula a bolsa-auxílio "esperada" pelo jovem com base no seu potencial e overall
+    const potentialMidPoint = (player.potential[0] + player.potential[1]) / 2;
+    const expectedWage = Math.floor((potentialMidPoint * 15) + (player.overall * 5));
+
+    const offeredWage = lastOffer.wage;
+    const wageDifferenceRatio = offeredWage / expectedWage;
+    const randomFactor = Math.random();
+
+    // Se a oferta for generosa (100% ou mais do esperado)
+    if (wageDifferenceRatio >= 1.0) {
+        if (randomFactor < 0.9) { // 90% de chance de aceitar
+            return { status: 'Aceite', reason: `${player.name} aceitou os termos e está feliz por se juntar à academia.` };
+        }
+    }
+
+    // Se a oferta for razoável (entre 75% e 100% do esperado)
+    if (wageDifferenceRatio >= 0.75) {
+        if (randomFactor < 0.7) { // 70% de chance de fazer contraproposta
+            // Pede um pouco mais, arredondando para o múltiplo de 50 mais próximo
+            const counterWage = Math.ceil((expectedWage * (1 + (Math.random() * 0.1))) / 50) * 50;
+            return {
+                status: 'Contraproposta',
+                reason: `${player.name} está interessado, mas gostaria de uma bolsa-auxílio de €${counterWage}.`,
+                counterOffer: { wage: counterWage }
+            };
+        }
+        // 30% de chance de aceitar mesmo assim
+        return { status: 'Aceite', reason: `${player.name} decidiu aceitar a sua proposta.` };
+    }
+
+    // Se a oferta for baixa (menos de 75% do esperado)
+    if (wageDifferenceRatio < 0.75) {
+        if (randomFactor < 0.8) { // 80% de chance de rejeitar diretamente
+            return { status: 'Rejeitada', reason: `A proposta para ${player.name} foi considerada muito baixa e foi rejeitada.` };
+        }
+        // 20% de chance de ainda fazer uma contraproposta pedindo o que acha justo
+        const counterWage = Math.ceil(expectedWage / 50) * 50;
+        return {
+            status: 'Contraproposta',
+            reason: `${player.name} acredita que o seu valor é maior e pede €${counterWage}.`,
+            counterOffer: { wage: counterWage }
+        };
+    }
+
+    // Resposta padrão caso nenhuma condição seja satisfeita (fallback de segurança)
+    return { status: 'Rejeitada', reason: `Após considerar a proposta, ${player.name} decidiu procurar outras oportunidades.` };
 }

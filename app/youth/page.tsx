@@ -8,16 +8,37 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { GraduationCap, Eye, Star, Plus, Send, AlertCircle, Users, FileSearch } from "lucide-react";
+import {
+    GraduationCap,
+    Eye,
+    Star,
+    Plus,
+    Send,
+    AlertCircle,
+    Users,
+    FileSearch,
+    PenSquare,
+    XCircle,
+    ChevronDown, RotateCcw
+} from "lucide-react";
 import { useCareer } from "@/contexts/career-context";
 import { YouthPlayerDetailModal } from "@/components/youth-player-detail-modal";
-import {AvailableScout, HireScoutModal} from "@/components/hire-scout-modal";
+import { AvailableScout, HireScoutModal } from "@/components/hire-scout-modal";
 import {cn, formatCompactNumber} from "@/lib/utils";
-import { YouthPlayer } from "@/lib/game-data";
+import { YouthPlayer, ScoutingReport, Offer } from "@/lib/game-data";
 import { Country } from "@/app/team-select/page";
+import { YouthContractOfferModal } from "@/components/youth-contract-offer-modal";
+import { toast } from "sonner";
+import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from "@/components/ui/dropdown-menu";
+import {
+    AlertDialog, AlertDialogAction, AlertDialogCancel,
+    AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
 
 
-// Componente para estado vazio
 const EmptyState = ({ icon: Icon, title, description }: { icon: React.ElementType, title: string, description: string }) => (
     <div className="text-center py-12">
         <Icon className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
@@ -26,9 +47,9 @@ const EmptyState = ({ icon: Icon, title, description }: { icon: React.ElementTyp
     </div>
 );
 
+const playerPositions = ["GOL", "ZAG", "LE", "LD", "VOL", "MC", "ME", "MD", "ATA", "PE", "PD"];
 
 export default function YouthAcademyPage() {
-    // --- GESTÃO DE ESTADO ---
     const {
         managedClub,
         youthSquad,
@@ -37,14 +58,20 @@ export default function YouthAcademyPage() {
         hireScout,
         startContractNegotiation,
         sendScoutOnMission,
-        signYouthPlayer
+        rejectScoutedPlayer,
+        recallScout,
+        fireScout
     } = useCareer();
 
     const [selectedYouthPlayer, setSelectedYouthPlayer] = useState<YouthPlayer | null>(null);
     const [isHireModalOpen, setIsHireModalOpen] = useState(false);
     const [countriesData, setCountriesData] = useState<Country[]>([]);
 
-    // Estado do formulário de envio de olheiro
+    const [reportForOffer, setReportForOffer] = useState<ScoutingReport | null>(null);
+    const [isOfferModalOpen, setIsOfferModalOpen] = useState(false);
+
+    const youthScouts = useMemo(() => scouts.filter(s => s.type === "youth"), [scouts])
+
     const [missionForm, setMissionForm] = useState({
         scoutId: undefined as string | undefined,
         country: "any",
@@ -53,7 +80,6 @@ export default function YouthAcademyPage() {
     });
     const [scoutError, setScoutError] = useState<string | null>(null);
 
-    // --- BUSCA DE DADOS PARA FILTROS DE OBSERVAÇÃO ---
     useEffect(() => {
         const fetchFilterData = async () => {
             const response = await fetch('/api/countries');
@@ -66,37 +92,58 @@ export default function YouthAcademyPage() {
     }, []);
 
     const handleHireScout = (scoutToHire: AvailableScout) => {
-        // Converte o olheiro 'AvailableScout' para o tipo 'Scout' que o contexto espera
-        hireScout({
-            ...scoutToHire,
-            status: 'Disponível',
-        });
+        hireScout({ ...scoutToHire, status: 'Disponível' });
         setIsHireModalOpen(false);
+        toast.success(`${scoutToHire.name} foi contratado para a sua equipa de olheiros!`);
     };
 
-    // --- MANIPULADORES DE EVENTOS CONECTADOS AO CONTEXTO ---
     const handleSendScout = () => {
         setScoutError(null);
         if (!missionForm.scoutId) {
             setScoutError("Por favor, selecione um olheiro disponível.");
+            toast.error("Nenhum olheiro selecionado.", {
+                description: "Você precisa escolher um olheiro antes de enviá-lo para uma missão.",
+            });
             return;
         }
-
 
         sendScoutOnMission({
             scoutId: parseInt(missionForm.scoutId),
             type: 'youth',
             country: missionForm.country === "any" ? undefined : missionForm.country,
+            position: missionForm.country === "any" ? undefined : missionForm.country,
         });
-
-        // Reseta o formulário para a próxima missão
+        const scoutName = scouts.find(s => s.id === parseInt(missionForm.scoutId!))?.name;
+        toast.info(`${scoutName} foi enviado em uma nova missão de observação.`);
         setMissionForm(s => ({...s, scoutId: undefined}));
     };
 
-    const leaguesForSelectedCountry = useMemo(() => {
-        if (missionForm.country === "any") return [];
-        return countriesData.find(c => c.name === missionForm.country)?.leagues || [];
-    }, [missionForm.country, countriesData]);
+    const handleOpenOfferModal = (report: ScoutingReport) => {
+        const potentialMidPoint = (report.player.potential[0] + report.player.potential[1]) / 2;
+        const signingCost = Math.floor((potentialMidPoint * 1000) + (report.player.overall * 500));
+
+        if ((activeCareer?.budget || 0) < signingCost) {
+            toast.error("Orçamento Insuficiente", {
+                description: "Você não tem fundos suficientes para cobrir os custos de assinatura deste jogador.",
+            });
+            return;
+        }
+
+        setReportForOffer(report);
+        setIsOfferModalOpen(true);
+    };
+
+    const handleSendYouthOffer = (offer: Pick<Offer, 'wage' | 'contractLength' | 'squadRole'>) => {
+        if (!reportForOffer) return;
+        startContractNegotiation(reportForOffer.player, offer);
+
+        toast.success(`Oferta de contrato enviada para ${reportForOffer.player.name}.`, {
+            description: "A resposta chegará na sua caixa de entrada em alguns dias.",
+        });
+
+        setIsOfferModalOpen(false);
+        setReportForOffer(null);
+    };
 
 
     return (
@@ -107,10 +154,10 @@ export default function YouthAcademyPage() {
                     <p className="text-muted-foreground">Desenvolva os futuros talentos e descubra novas jóias para o {managedClub?.name}</p>
                 </div>
 
-                <Tabs defaultValue="squad">
+                <Tabs defaultValue="reports">
                     <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="squad">Elenco da Base ({youthSquad.length})</TabsTrigger>
-                        <TabsTrigger value="scouting">Observação ({activeCareer?.scouts.length || 0})</TabsTrigger>
+                        <TabsTrigger value="scouting">Observação ({youthScouts.length || 0})</TabsTrigger>
                         <TabsTrigger value="reports">Relatórios ({activeCareer?.scoutingReports.length || 0})</TabsTrigger>
                     </TabsList>
 
@@ -126,7 +173,7 @@ export default function YouthAcademyPage() {
                                     <EmptyState
                                         icon={GraduationCap}
                                         title="A academia está vazia"
-                                        description="Uma nova safra de talentos chegará no início da próxima temporada (15 de Julho)."
+                                        description="Contrate jovens a partir dos relatórios dos olheiros para começar a desenvolvê-los."
                                     />
                                 ) : (
                                     <div className="space-y-4">
@@ -145,7 +192,9 @@ export default function YouthAcademyPage() {
                                                     </div>
                                                     <div className="flex items-center gap-2 self-end sm:self-center">
                                                         <Button variant="outline" size="sm" onClick={() => setSelectedYouthPlayer(player)}><Eye className="h-4 w-4 mr-1"/> Ver Análise</Button>
-                                                        <Button size="sm" onClick={() => startContractNegotiation(player)}>Promover</Button>
+                                                        <Button size="sm" onClick={() => startContractNegotiation(player, {squadRole: 'Rotação'})}>
+                                                            <PenSquare className="h-4 w-4 mr-1"/> Promover
+                                                        </Button>
                                                     </div>
                                                 </div>
                                                 <div className="space-y-2 mt-3">
@@ -166,7 +215,7 @@ export default function YouthAcademyPage() {
                             <Card>
                                 <CardHeader className="flex flex-row items-start justify-between">
                                     <div>
-                                        <CardTitle>Rede de Olheiros ({scouts.length}/5)</CardTitle>
+                                        <CardTitle>Rede de Olheiros ({youthScouts.length}/5)</CardTitle>
                                         <CardDescription>Gira a sua equipa de olheiros.</CardDescription>
                                     </div>
                                     <Button size="sm" onClick={() => setIsHireModalOpen(true)} disabled={scouts.length >= 5}>
@@ -174,11 +223,12 @@ export default function YouthAcademyPage() {
                                     </Button>
                                 </CardHeader>
                                 <CardContent className="space-y-3">
-                                    {scouts.length === 0 ? (
+                                    {youthScouts.length === 0 ? (
                                         <EmptyState icon={Users} title="Nenhum Olheiro Contratado" description="Clique em 'Contratar' para montar a sua equipa." />
                                     ) : (
-                                        scouts.map(scout => (
+                                        youthScouts.map(scout => (
                                             <div key={scout.id} className="p-3 rounded-lg border flex items-center justify-between">
+                                                {/* Bloco de informações do olheiro (agora sem o Badge) */}
                                                 <div>
                                                     <p className="font-semibold">{scout.name}</p>
                                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -186,7 +236,56 @@ export default function YouthAcademyPage() {
                                                         <span>• {scout.specialty}</span>
                                                     </div>
                                                 </div>
-                                                <Badge variant={scout.status === 'Disponível' ? 'default' : 'secondary'}>{scout.status}</Badge>
+
+                                                {/* NOVO: Div para agrupar os elementos da direita (Estado e Ações) */}
+                                                <div className="flex items-center gap-4">
+                                                    <Badge variant={scout.status === 'Disponível' ? 'default' : 'secondary'}>
+                                                        {scout.status}
+                                                    </Badge>
+
+                                                    <DropdownMenu>
+                                                        <DropdownMenuTrigger asChild>
+                                                            <Button variant="outline" size="sm">
+                                                                Ações
+                                                                <ChevronDown className="h-4 w-4 ml-2"/>
+                                                            </Button>
+                                                        </DropdownMenuTrigger>
+                                                        <DropdownMenuContent align="end">
+                                                            <DropdownMenuItem
+                                                                onClick={() => recallScout(scout.id)}
+                                                                disabled={scout.status !== 'Observando'}
+                                                            >
+                                                                <RotateCcw className="h-4 w-4 mr-2" />
+                                                                Chamar de Volta
+                                                            </DropdownMenuItem>
+                                                            <AlertDialog>
+                                                                <AlertDialogTrigger asChild>
+                                                                    <DropdownMenuItem
+                                                                        className="text-red-500 focus:bg-red-500/10 focus:text-red-600"
+                                                                        onSelect={(e) => e.preventDefault()}
+                                                                    >
+                                                                        <XCircle className="h-4 w-4 mr-2" />
+                                                                        Demitir Olheiro
+                                                                    </DropdownMenuItem>
+                                                                </AlertDialogTrigger>
+                                                                <AlertDialogContent>
+                                                                    <AlertDialogHeader>
+                                                                        <AlertDialogTitle>Demitir {scout.name}?</AlertDialogTitle>
+                                                                        <AlertDialogDescription>
+                                                                            Esta ação não pode ser desfeita. O olheiro será permanentemente removido da sua equipa.
+                                                                        </AlertDialogDescription>
+                                                                    </AlertDialogHeader>
+                                                                    <AlertDialogFooter>
+                                                                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                                                        <AlertDialogAction onClick={() => fireScout(scout.id)} className="bg-destructive hover:bg-destructive/90">
+                                                                            Confirmar Demissão
+                                                                        </AlertDialogAction>
+                                                                    </AlertDialogFooter>
+                                                                </AlertDialogContent>
+                                                            </AlertDialog>
+                                                        </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </div>
                                             </div>
                                         ))
                                     )}
@@ -199,8 +298,8 @@ export default function YouthAcademyPage() {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <Select value={missionForm.scoutId} onValueChange={(val) => setMissionForm(s => ({...s, scoutId: val}))}>
-                                        <SelectTrigger><SelectValue placeholder="Escolha um olheiro disponível..." /></SelectTrigger>
-                                        <SelectContent>{scouts.filter(s => s.status === 'Disponível').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.rating} estrelas)</SelectItem>)}</SelectContent>
+                                        <SelectTrigger><SelectValue placeholder="Escolha um olheiro de jovens..." /></SelectTrigger>
+                                        <SelectContent>{youthScouts.filter(s => s.status === 'Disponível').map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name} ({s.rating} estrelas)</SelectItem>)}</SelectContent>
                                     </Select>
                                     <Select value={missionForm.country} onValueChange={(val) => setMissionForm(s => ({...s, country: val, leagueName: "any"}))}>
                                         <SelectTrigger><SelectValue placeholder="País" /></SelectTrigger>
@@ -209,11 +308,13 @@ export default function YouthAcademyPage() {
                                             {countriesData.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
-                                    <Select value={missionForm.leagueName} onValueChange={(val) => setMissionForm(s => ({...s, leagueName: val}))} disabled={missionForm.country === 'any'}>
-                                        <SelectTrigger><SelectValue placeholder="Liga" /></SelectTrigger>
+                                    <Select value={missionForm.position} onValueChange={(val) => setMissionForm(s => ({ ...s, position: val }))}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Posição" />
+                                        </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="any">Qualquer Liga</SelectItem>
-                                            {leaguesForSelectedCountry.map(l => <SelectItem key={l.name} value={l.name}>{l.name}</SelectItem>)}
+                                            <SelectItem value="any">Qualquer Posição</SelectItem>
+                                            {playerPositions.map(pos => <SelectItem key={pos} value={pos}>{pos}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                     {scoutError && (<div className="flex items-center gap-2 text-sm text-destructive p-2 bg-destructive/10 rounded-lg"><AlertCircle className="h-4 w-4" /><p>{scoutError}</p></div>)}
@@ -239,7 +340,7 @@ export default function YouthAcademyPage() {
                                     const signingCost = Math.floor((potentialMidPoint * 1000) + (player.overall * 500));
 
                                     return (
-                                        <div key={player.id} className="p-3 rounded-lg border flex items-center justify-between">
+                                        <div key={report.reportId} className="p-3 rounded-lg border flex items-center justify-between">
                                             <div className="flex items-center gap-3">
                                                 <Avatar><AvatarFallback>{player.name.split(" ").map(n => n[0]).join("")}</AvatarFallback></Avatar>
                                                 <div>
@@ -247,29 +348,27 @@ export default function YouthAcademyPage() {
                                                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                                         <Badge variant="outline">{player.position}</Badge>
                                                         <span className="flex items-center"><Star className="h-3 w-3 mr-1 text-yellow-500"/>{player.overall}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-1 mt-2">
-                                                        {player.traits && player.traits.map(trait => (
-                                                            <Badge key={trait} variant="secondary">{trait}</Badge>
-                                                        ))}
+                                                        <span className="font-bold text-blue-500">Potencial: {player.potential.join('-')}</span>
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-4">
-                                                <div className="text-right">
-                                                    <p className="font-bold text-blue-500">{player.potential}</p>
-                                                    <p className="text-xs text-muted-foreground">Potencial</p>
-                                                </div>
-                                                <div className="flex flex-col items-end gap-2">
-                                                    <p className="font-semibold text-sm text-green-500">€{formatCompactNumber(signingCost)}</p>
-                                                    <Button
-                                                        size="sm"
-                                                        onClick={() => signYouthPlayer(report.reportId)}
-                                                        disabled={(activeCareer?.budget || 0) < signingCost}
-                                                    >
-                                                        <Plus className="h-4 w-4 mr-1"/> Assinar para Academia
-                                                    </Button>
-                                                </div>
+                                            <div className="flex flex-col items-end gap-2">
+                                                <p className="font-semibold text-xs text-muted-foreground">Custo Assinatura: <span className="text-green-500">€{formatCompactNumber(signingCost)}</span></p>
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => handleOpenOfferModal(report)}
+                                                    disabled={(activeCareer?.budget || 0) < signingCost}
+                                                >
+                                                    <Plus className="h-4 w-4 mr-1"/> Oferecer Contrato
+                                                </Button>
+                                                <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    onClick={() => rejectScoutedPlayer(report.reportId)}
+                                                    title="Rejeitar jogador"
+                                                >
+                                                    <XCircle className="h-5 w-5 text-red-500" />
+                                                </Button>
                                             </div>
                                         </div>
                                     )
@@ -279,11 +378,19 @@ export default function YouthAcademyPage() {
                     </TabsContent>
                 </Tabs>
             </div>
+
+            {/* Modais da Página */}
             <YouthPlayerDetailModal player={selectedYouthPlayer} isOpen={!!selectedYouthPlayer} onOpenChange={(isOpen) => !isOpen && setSelectedYouthPlayer(null)} />
             <HireScoutModal
                 isOpen={isHireModalOpen}
                 onOpenChange={setIsHireModalOpen}
                 onHire={handleHireScout}
+            />
+            <YouthContractOfferModal
+                isOpen={isOfferModalOpen}
+                onClose={() => setIsOfferModalOpen(false)}
+                report={reportForOffer}
+                onSendOffer={handleSendYouthOffer}
             />
         </>
     );

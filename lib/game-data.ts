@@ -36,6 +36,15 @@ export interface LoanListing {
     hasOptionToBuy: boolean;
     hasObligationToBuy: boolean;
 }
+export interface AvailableScout {
+    id: number;
+    name: string;
+    rating: number;
+    specialty: string;
+    nationality: string;
+    cost: number;
+    type: 'youth' | 'senior';
+}
 
 export interface Scout {
     id: number;
@@ -43,7 +52,9 @@ export interface Scout {
     rating: number;
     specialty: string;
     status: 'Disponível' | 'Observando';
-    type: 'youth' | 'senior'; // 'youth' para promessas, 'senior' para jogadores existentes
+    type: 'youth' | 'senior';
+    nationality: string,
+    cost: number,
 }
 
 export interface ScoutMission {
@@ -108,10 +119,13 @@ export interface CareerSave {
     negotiations: Negotiation[];
     scouts: Scout[];
     scoutMissions: ScoutMission[];
+    pendingYouthSignings: YouthPlayer[];
     scoutingReports: ScoutingReport[];
     activeFormation: Formation | null;
     youthSquad: YouthPlayer[];
     squad: Player[];
+    availableScouts: AvailableScout[];
+    lastScoutMarketRefresh: string;
 }
 
 export interface YouthPlayer {

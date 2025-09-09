@@ -611,7 +611,7 @@ export default function TransfersPage() {
                                                             <Pencil className="h-4 w-4 mr-1"/>Editar
                                                         </Button>
                                                         <Button variant="destructive" size="sm"
-                                                                onClick={() => unlistPlayerForTransfer(player.id)}>
+                                                                onClick={() => unlistPlayerForTransfer(player.id, player)}>
                                                             <Trash2 className="h-4 w-4 mr-1"/>Remover
                                                         </Button>
                                                     </div>

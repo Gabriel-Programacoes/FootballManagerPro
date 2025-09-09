@@ -7,7 +7,7 @@ import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { CareerProvider } from "@/contexts/career-context"
 import { CareerGuard } from "@/components/career-guard"; // Mantemos o guardião aqui
-
+import { Toaster } from "sonner";
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
@@ -34,6 +34,7 @@ export default function RootLayout({
                     {children}
                 </CareerGuard>
             </CareerProvider>
+            <Toaster richColors />
         </ThemeProvider>
         </body>
         </html>

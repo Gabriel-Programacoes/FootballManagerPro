@@ -4,10 +4,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Club } from "@/app/team-select/page"; // Importa o tipo Club correto
+import { Club } from "@/app/team-select/page";
 import { formatCompactNumber } from "@/lib/utils";
 import { Check, X, Loader2 } from "lucide-react";
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 // --- NOVAS INTERFACES PARA OS DADOS VINDOS DA API ---
 interface ClubDetailsFromAPI {
@@ -74,6 +75,10 @@ export function ClubDetailModal({ club, isOpen, onOpenChange, onConfirm }: ClubD
     const handleConfirm = () => {
         if (club) {
             onConfirm(club);
+            toast.success(`Bem-vindo ao ${club.name}!`, {
+                description: "Sua carreira como manager começa agora. Boa sorte!",
+                duration: 5000,
+            });
         }
     };
 

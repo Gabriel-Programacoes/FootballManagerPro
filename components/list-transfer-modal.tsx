@@ -20,7 +20,7 @@ interface ListTransferModalProps {
     player: Player | null;
     isOpen: boolean;
     onOpenChange: (isOpen: boolean) => void;
-    onConfirm: (playerId: string, askingPrice: number) => void;
+    onConfirm: (playerId: string, askingPrice: number, player: Player) => void;
 }
 
 export function ListTransferModal({ player, isOpen, onOpenChange, onConfirm }: ListTransferModalProps) {
@@ -31,7 +31,7 @@ export function ListTransferModal({ player, isOpen, onOpenChange, onConfirm }: L
     const handleConfirm = () => {
         const numericPrice = parseFloat(price) * 1_000_000; // Converte de milhões para número
         if (!isNaN(numericPrice) && numericPrice > 0) {
-            onConfirm(player.id, numericPrice);
+            onConfirm(player.id, numericPrice, player);
             onOpenChange(false);
         } else {
             alert("Por favor, insira um valor de venda válido.");
