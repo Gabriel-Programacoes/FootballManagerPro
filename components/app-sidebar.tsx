@@ -12,7 +12,7 @@ import {
     Target,
     FileText,
     Gamepad2,
-    TrendingUp,
+    TrendingUp, Banknote,
 } from "lucide-react"
 
 import {
@@ -37,6 +37,7 @@ const menuItems = [
     { title: "Academia", url: "/youth", icon: GraduationCap },
     { title: "Temporadas", url: "/seasons", icon: Calendar },
     { title: "Troféus", url: "/trophies", icon: Trophy },
+    { title: "Finanças", url: "/finances", icon: Banknote },
 ]
 
 const gameItems = [

@@ -23,6 +23,17 @@ export interface SeasonObjective {
     isCompleted: boolean;
 }
 
+export interface BoardRequest {
+    id: string;
+    type: "transfer" | "wage" | "facilities";
+    amount: number;
+    reason: string;
+    justification: string;
+    status: "pending" | "approved" | "rejected";
+    date: string;
+    response?: string;
+}
+
 export interface TransferListing {
     playerId: string;
     askingPrice: number;
@@ -104,11 +115,31 @@ export interface Negotiation {
     deadline: string;
 }
 
+export interface Transaction {
+    id: string;
+    date: string;
+    description: string;
+    amount: number;
+    type: 'income' | 'expense';
+    category: 'transfers' | 'wages' | 'scouting' | 'match_day' | 'sponsors' | 'other';
+}
+
+export interface Finances {
+    weeklySummary: {
+        income: number;
+        expenses: number;
+    };
+    transactions: Transaction[];
+}
+
 export interface CareerSave {
     saveName: string;
     clubId: string;
     clubName: string;
     budget: number;
+    totalBudget: number;
+    transferBudget: number;
+    wageBudget: number;
     currentSeason: string;
     currentDate: string;
     results: MatchResult[];
@@ -126,6 +157,9 @@ export interface CareerSave {
     squad: Player[];
     availableScouts: AvailableScout[];
     lastScoutMarketRefresh: string;
+    finances: Finances;
+    transactions: Transaction[];
+    boardRequests: BoardRequest[];
 }
 
 export interface YouthPlayer {

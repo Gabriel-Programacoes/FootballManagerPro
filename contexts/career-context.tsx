@@ -9,7 +9,10 @@ import {
     MatchResult,
     LoanListing,
     Negotiation,
-    CareerSave, ScoutingReport, ScoutMission, Scout, Offer, YouthPlayer, AvailableScout,
+    CareerSave, ScoutingReport,
+    ScoutMission, Scout, Offer,
+    YouthPlayer, AvailableScout,
+    BoardRequest
 } from "@/lib/game-data";
 import {formatCompactNumber} from "@/lib/utils";
 import {processNegotiation, processYouthContractNegotiation} from "@/lib/simulation/negotiation-engine";
@@ -142,6 +145,11 @@ interface CareerContextType {
     recallScout: (scoutId: number) => void;
     fireScout: (scoutId: number) => void;
     hireScout: (scout: AvailableScout) => void;
+
+    // Finanças
+    updateBudgetAllocation: (newTransferBudget: number, newWageBudget: number) => void;
+    submitBoardRequest: (request: Omit<BoardRequest, 'id' | 'status' | 'date' | 'response'>) => void;
+
 }
 
 const CareerContext = createContext<CareerContextType | undefined>(undefined);
@@ -192,13 +200,13 @@ function useCareerState(): CareerContextType {
             };
             fetchSchedule();
             if (activeCareer.activeFormation) {
-                setActiveFormation(activeCareer.activeFormation);
+                setActiveFormation(activeCareer.activeFormation || null);
             }
             if (activeCareer.youthSquad) {
-                setYouthSquad(activeCareer.youthSquad);
+                setYouthSquad(activeCareer.youthSquad || []);
             }
             if (activeCareer.scouts) {
-                setScouts(activeCareer.scouts);
+                setScouts(activeCareer.scouts || []);
             }
         } else {
             setSquad([]);
@@ -230,6 +238,8 @@ function useCareerState(): CareerContextType {
                         scoutingReports: career.scoutingReports || [],
                         youthSquad: career.youthSquad || [],
                         squad: career.squad || [],
+                        availableScouts: career.availableScouts || generateScouts(),
+                        lastScoutMarketRefresh: career.lastScoutMarketRefresh || career.currentDate,
                     }));
 
                     setCareers(parsedCareers);
@@ -273,6 +283,132 @@ function useCareerState(): CareerContextType {
         setScoutingReports(activeCareer?.scoutingReports || [])
         setActiveCareer(updatedCareer);
     }, [activeCareerIndex]);
+
+    const startNewCareer = (club: Club) => {
+        const saveName = prompt("Dê um nome para sua nova carreira:", `Carreira com ${club.name}`);
+        if (!saveName) return;
+
+        const initialTotalBudget = 150000000; // Ex: 150M
+        const initialTransferBudget = 85000000; // 85M
+        const initialWageBudget = 45000000;  // 45M
+        const initialCash = 20000000; // 20M em caixa
+
+        // Guarda a data de início numa variável para ser reutilizada
+        const startDate = new Date('2024-07-01').toISOString();
+
+        const newCareer: CareerSave = {
+            saveName,
+            clubId: club.id,
+            clubName: club.name,
+            budget: initialCash,
+            totalBudget: initialTotalBudget,
+            transferBudget: initialTransferBudget,
+            wageBudget: initialWageBudget,
+            finances: {
+                weeklySummary: {income: 0, expenses: 0},
+                transactions: [{
+                    id: `trans_${Date.now()}`,
+                    date: startDate,
+                    description: "Patrocínio Inicial da Temporada",
+                    amount: 50000,
+                    type: 'income',
+                    category: 'sponsors'},
+                    {
+                    id: `trans_${Date.now()}`, date: startDate, description: "Orçamento inicial da temporada",
+                    amount: 150000000, type: 'income', category: 'sponsors'
+                }]
+            },
+            transactions: [],
+            boardRequests: [],
+            currentSeason: "2024/25",
+            currentDate: startDate,
+            results: [],
+            news: [{title: `Bem-vindo ao ${club.name}!`, date: new Date().toISOString(), type: 'neutral'}],
+            objectives: [
+                {
+                    id: 'league',
+                    title: 'Terminar no meio da tabela',
+                    progress: 0,
+                    reward: 'Prestígio',
+                    isCompleted: false
+                },
+                {
+                    id: 'cup',
+                    title: 'Chegar às oitavas de final da copa',
+                    progress: 0,
+                    reward: 'Prestígio',
+                    isCompleted: false
+                }
+            ],
+            transferList: [],
+            loanList: [],
+            youthSquad: [],
+            scouts: [],
+            availableScouts: generateScouts(),
+            lastScoutMarketRefresh: startDate,
+            scoutMissions: [],
+            scoutingReports: [],
+            negotiations: [],
+            pendingYouthSignings: [],
+            activeFormation: null,
+            squad: [],
+        };
+
+        const updatedCareers = [...careers, newCareer];
+        const newIndex = updatedCareers.length - 1;
+
+        setCareers(updatedCareers);
+        setActiveCareerIndex(newIndex);
+        setActiveCareer(newCareer);
+        localStorage.setItem('careers', JSON.stringify(updatedCareers));
+        localStorage.setItem('activeCareerIndex', JSON.stringify(newIndex));
+
+        router.push('/dashboard');
+    };
+
+    const updateBudgetAllocation = (newTransferBudget: number, newWageBudget: number) => {
+        if (!activeCareer) return;
+
+        if (newTransferBudget + newWageBudget > activeCareer.totalBudget) {
+            toast.error("Ajuste inválido", {
+                description: "A soma dos orçamentos de transferência e salários não pode exceder o orçamento total.",
+            });
+            return;
+        }
+
+        const newCareerState: CareerSave = {
+            ...activeCareer,
+            transferBudget: newTransferBudget,
+            wageBudget: newWageBudget,
+        };
+
+        saveCareerProgress(newCareerState);
+    };
+
+    const submitBoardRequest = (request: Omit<BoardRequest, 'id' | 'status' | 'date' | 'response'>) => {
+        if (!activeCareer) return;
+
+        const newRequest: BoardRequest = {
+            ...request,
+            id: `req_${Date.now()}`,
+            status: 'pending',
+            date: activeCareer.currentDate,
+        };
+
+        const newCareerState: CareerSave = {
+            ...activeCareer,
+            boardRequests: [newRequest, ...activeCareer.boardRequests]
+        };
+
+        newCareerState.news.unshift({
+            title: `Pedido de €${formatCompactNumber(request.amount)} enviado à diretoria.`,
+            date: activeCareer.currentDate,
+            type: 'neutral'
+        });
+
+        saveCareerProgress(newCareerState);
+        toast.info("Seu pedido foi enviado para a diretoria para análise.");
+    };
 
     const listPlayerForLoan = (playerId: string, conditions: Omit<LoanListing, 'playerId' | 'isListed'>, player: Player) => {
         if (!activeCareer) return;
@@ -562,6 +698,69 @@ function useCareerState(): CareerContextType {
         currentDate.setDate(currentDate.getDate() + 1);
         newCareerState.currentDate = currentDate.toISOString();
 
+        // LÓGICA PARA PROCESSAR PEDIDOS À DIRETORIA
+        newCareerState.boardRequests.forEach(req => {
+            const daysSinceRequest = (currentDate.getTime() - new Date(req.date).getTime()) / (1000 * 3600 * 24);
+
+            // Simula uma resposta da diretoria após 3 a 5 dias
+            if (req.status === 'pending' && daysSinceRequest > 3 + Math.random() * 2) {
+                const isApproved = Math.random() > 0.4; // 60% de chance de aprovação
+
+                if (isApproved) {
+                    req.status = 'approved';
+                    req.response = `Após análise, decidimos aprovar o seu pedido. O valor de €${req.amount.toLocaleString()} foi liberado.`;
+
+                    if (req.type === 'transfer') newCareerState.transferBudget += req.amount;
+                    if (req.type === 'wage') newCareerState.wageBudget += req.amount;
+                    if (req.type === 'facilities') newCareerState.budget += req.amount;
+
+                    // O orçamento total também aumenta
+                    newCareerState.totalBudget += req.amount;
+
+                    newCareerState.news.unshift({
+                        title: `Diretoria APROVOU seu pedido de €${formatCompactNumber(req.amount)}.`,
+                        date: newCareerState.currentDate,
+                        type: 'positive'
+                    });
+                } else {
+                    req.status = 'rejected';
+                    req.response = `Infelizmente, não podemos aprovar seu pedido neste momento. A situação financeira do clube não permite este investimento.`;
+                    newCareerState.news.unshift({
+                        title: `Diretoria REJEITOU seu pedido de €${formatCompactNumber(req.amount)}.`,
+                        date: newCareerState.currentDate,
+                        type: 'negative'
+                    });
+                }
+            }
+        });
+
+        if (!newCareerState.lastScoutMarketRefresh) {
+            newCareerState.lastScoutMarketRefresh = newCareerState.currentDate;
+        }
+
+        if (currentDate.getDay() === 0) {
+            const totalPlayerWages = squad.reduce((acc, player) => acc + (player.contract.wage || 0), 0);
+            const totalScoutWages = newCareerState.scouts.reduce((acc, scout) => acc + (scout.cost / 4), 0)
+            const totalWages= totalPlayerWages + totalScoutWages;
+
+            if (totalWages > 0) {
+                newCareerState.budget -= totalWages;
+                newCareerState.finances.transactions.unshift({
+                    id: `trans_wages_${Date.now()}`,
+                    date: newCareerState.currentDate,
+                    description: "Salários (Jogadores e Equipe Técnica",
+                    amount: totalWages,
+                    type: "expense",
+                    category: "wages",
+                });
+                newCareerState.news.unshift({
+                    title: 'Pagamento de salários de €${formatCompactNumber(totalWages)} efetuado.',
+                    date: newCareerState.currentDate,
+                    type: 'neutral'
+                });
+            }
+        }
+
         // LÓGICA DE ATUALIZAÇÃO DO MERCADO DE OLHEIROS
         const lastRefresh = new Date(newCareerState.lastScoutMarketRefresh);
 
@@ -820,52 +1019,6 @@ function useCareerState(): CareerContextType {
         }
     };
 
-    const startNewCareer = (club: Club) => {
-        const saveName = prompt("Dê um nome para sua nova carreira:", `Carreira com ${club.name}`);
-        if (!saveName) return;
-
-        // Guarda a data de início numa variável para ser reutilizada
-        const startDate = new Date('2024-07-01').toISOString();
-
-        const newCareer: CareerSave = {
-            saveName,
-            clubId: club.id,
-            clubName: club.name,
-            budget: 10000000,
-            currentSeason: "2024/25",
-            currentDate: startDate, // Usa a variável aqui
-            results: [],
-            news: [{ title: `Bem-vindo ao ${club.name}!`, date: new Date().toISOString(), type: 'neutral' }],
-            objectives: [
-                { id: 'league', title: 'Terminar no meio da tabela', progress: 0, reward: 'Prestígio', isCompleted: false },
-                { id: 'cup', title: 'Chegar às oitavas de final da copa', progress: 0, reward: 'Prestígio', isCompleted: false }
-            ],
-            transferList: [],
-            loanList: [],
-            youthSquad: [],
-            scouts: [],
-            availableScouts: generateScouts(),
-            lastScoutMarketRefresh: startDate,
-            scoutMissions: [],
-            scoutingReports: [],
-            negotiations: [],
-            pendingYouthSignings: [],
-            activeFormation: null,
-            squad: [],
-        };
-
-        const updatedCareers = [...careers, newCareer];
-        const newIndex = updatedCareers.length - 1;
-
-        setCareers(updatedCareers);
-        setActiveCareerIndex(newIndex);
-        setActiveCareer(newCareer);
-        localStorage.setItem('careers', JSON.stringify(updatedCareers));
-        localStorage.setItem('activeCareerIndex', JSON.stringify(newIndex));
-
-        router.push('/dashboard');
-    };
-
     const acceptAiOffer = (negotiationId: string) => {
         if (!activeCareer) return;
         const newCareerState = { ...activeCareer };
@@ -880,6 +1033,15 @@ function useCareerState(): CareerContextType {
             if (lastOffer && typeof lastOffer.value === 'number') {
                 // 1. Adiciona o valor da venda ao orçamento
                 newCareerState.budget += lastOffer.value;
+
+                newCareerState.finances.transactions.unshift({
+                    id: `trans_${Date.now()}`,
+                    date: new Date().toISOString(),
+                    description: `Venda de ${negotiation?.playerName}`,
+                    amount: lastOffer.value,
+                    type: "income",
+                    category: "transfers"
+                })
 
                 // 2. Remove o jogador do seu plantel
                 // (Esta lógica precisa ser aprimorada para remover de 'newCareerState.squad')
@@ -1071,77 +1233,123 @@ function useCareerState(): CareerContextType {
     };
 
     const fireScout = (scoutId: number) => {
-        if (!activeCareer || !confirm("Tem a certeza que deseja demitir este olheiro?")) return;
+        setActiveCareer(currentCareer => {
+            if (!currentCareer) return null;
 
-        const scout = activeCareer.scouts.find(s => s.id === scoutId);
-        if (!scout) return;
+            const scout = currentCareer.scouts.find(s => s.id === scoutId);
+            if (!scout) return currentCareer;
 
-        // .filter() já cria novos arrays, o que é imutável e correto
-        const updatedScouts = activeCareer.scouts.filter(s => s.id !== scoutId);
-        const updatedMissions = activeCareer.scoutMissions.filter(m => m.scoutId !== scoutId);
+            // Cria o novo estado de forma imutável e segura
+            const newCareerState: CareerSave = {
+                ...currentCareer,
+                scouts: currentCareer.scouts.filter(s => s.id !== scoutId),
+                scoutMissions: currentCareer.scoutMissions.filter(m => m.scoutId !== scoutId),
+            };
 
-        const newCareerState: CareerSave = {
-            ...activeCareer,
-            scouts: updatedScouts,
-            scoutMissions: updatedMissions
-        };
+            toast.success(`${scout.name} foi demitido.`, {
+                description: "O seu contrato foi terminado."
+            });
 
-        toast.success(`${scout.name} foi demitido.`, {
-            description: "O seu contrato foi terminado."
+            // Salva o progresso
+            if (activeCareerIndex !== null) {
+                setCareers(currentCareers => {
+                    const updatedCareers = [...currentCareers];
+                    updatedCareers[activeCareerIndex] = newCareerState;
+                    localStorage.setItem('careers', JSON.stringify(updatedCareers));
+                    return updatedCareers;
+                });
+            }
+
+            // Sincroniza o estado local para a UI reagir
+            setScouts(newCareerState.scouts);
+            return newCareerState;
         });
-
-        saveCareerProgress(newCareerState);
-        setScouts(newCareerState.scouts);
     };
 
-    const hireScout = (scoutToHire: AvailableScout) => {
-        if (!activeCareer) return;
+    const hireScout = useCallback((scoutToHire: AvailableScout) => {
+        setActiveCareer(currentCareer => {
+            if (!currentCareer) return null;
 
-        // 1. Verifica o limite de olheiros contratados
-        if (activeCareer.scouts.length >= 5) {
-            toast.warning("Você atingiu o limite máximo de 5 olheiros.");
-            return;
-        }
+            // 1. Verificações de regras com o estado mais recente
+            if (currentCareer.scouts.length >= 5) {
+                toast.warning("Você atingiu o limite máximo de 5 olheiros.");
+                return currentCareer;
+            }
 
-        // 2. Verifica se há orçamento suficiente para o custo do olheiro
-        if (activeCareer.budget < scoutToHire.cost) {
-            toast.error("Orçamento insuficiente para contratar este olheiro.");
-            return;
-        }
+            if (currentCareer.budget < scoutToHire.cost) {
+                toast.error("Orçamento insuficiente para contratar este olheiro.");
+                return currentCareer;
+            }
 
-        const newCareerState: CareerSave = JSON.parse(JSON.stringify(activeCareer));
+            // 2. A VERIFICAÇÃO CRUCIAL ANTI-RACE CONDITION:
+            // Confirma se o olheiro ainda existe na lista de disponíveis NO MOMENTO EXATO DA EXECUÇÃO
+            const scoutStillAvailable = currentCareer.availableScouts.some(s => s.id === scoutToHire.id);
 
-        // 3. Remove o olheiro da lista de disponíveis no mercado
-        newCareerState.availableScouts = newCareerState.availableScouts.filter(s => s.id !== scoutToHire.id);
+            if (!scoutStillAvailable) {
+                // Se o olheiro já foi contratado por uma operação anterior,
+                // esta tentativa é ignorada silenciosamente.
+                // A UI irá atualizar em breve para refletir isso.
+                return currentCareer;
+            }
 
-        // 4. Cria o olheiro "permanente" para a sua equipa (sem a propriedade 'cost')
-        const newScout: Scout = {
-            id: scoutToHire.id,
-            name: scoutToHire.name,
-            rating: scoutToHire.rating,
-            specialty: scoutToHire.specialty,
-            status: 'Disponível',
-            type: scoutToHire.type,
-            cost: scoutToHire.cost,
-            nationality: scoutToHire.nationality,
-        };
+            // 3. Se tudo estiver OK, cria o novo olheiro e o novo estado de forma imutável
+            const newScout: Scout = {
+                id: scoutToHire.id,
+                name: scoutToHire.name,
+                rating: scoutToHire.rating,
+                specialty: scoutToHire.specialty,
+                status: 'Disponível',
+                type: scoutToHire.type,
+                cost: scoutToHire.cost,
+                nationality: scoutToHire.nationality,
+            };
 
-        // 5. Adiciona o novo olheiro à sua lista de contratados
-        newCareerState.scouts.push(newScout);
+            const newCareerState: CareerSave = {
+                ...currentCareer,
+                budget: currentCareer.budget - scoutToHire.cost,
+                scouts: [...currentCareer.scouts, newScout],
+                availableScouts: currentCareer.availableScouts.filter(s => s.id !== scoutToHire.id),
+                news: [
+                    {
+                        title: `O olheiro ${scoutToHire.name} foi contratado para a sua equipa!`,
+                        date: new Date().toISOString(),
+                        type: 'positive' as const
+                    },
+                    ...currentCareer.news
+                ],
+                finances: {
+                    ...currentCareer.finances,
+                    transactions: [
+                        {
+                            id: `trans_scout_${scoutToHire.id}_${Date.now()}`,
+                            date: new Date().toISOString(),
+                            description: `Taxa de contratação: ${scoutToHire.name}`,
+                            amount: scoutToHire.cost,
+                            type: 'expense',
+                            category: 'scouting'
+                        },
+                        ...currentCareer.finances.transactions
+                    ]
+                },
+            };
 
-        // 6. Deduz o custo do orçamento
-        newCareerState.budget -= scoutToHire.cost;
+            toast.success(`${scoutToHire.name} juntou-se à sua equipa de observação!`);
 
-        // 7. Adiciona uma notícia e um toast de sucesso
-        newCareerState.news.unshift({
-            title: `O olheiro ${scoutToHire.name} foi contratado para a sua equipa!`,
-            date: new Date().toISOString(),
-            type: 'positive' as const
+            // 4. Salva o progresso
+            if (activeCareerIndex !== null) {
+                setCareers(currentCareers => {
+                    const updatedCareers = [...currentCareers];
+                    updatedCareers[activeCareerIndex] = newCareerState;
+                    localStorage.setItem('careers', JSON.stringify(updatedCareers));
+                    return updatedCareers;
+                });
+            }
+
+            // Sincroniza o estado local para a UI reagir
+            setScouts(newCareerState.scouts);
+            return newCareerState;
         });
-        toast.success(`${scoutToHire.name} juntou-se à sua equipa de observação!`);
-
-        saveCareerProgress(newCareerState);
-    };
+    }, [activeCareerIndex]);
 
     // Lógica para encontrar o clube e a liga a partir do estado ativo
     const { managedClub, managedLeague } = useMemo(() => {
@@ -1164,6 +1372,8 @@ function useCareerState(): CareerContextType {
         isLoading,
         careers,
         schedule,
+        updateBudgetAllocation,
+        submitBoardRequest,
         youthSquad,
         loadCareer,
         startNewCareer,

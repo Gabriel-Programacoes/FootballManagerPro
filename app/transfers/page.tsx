@@ -73,6 +73,7 @@ export default function TransfersPage() {
         sendScoutOnMission,
         isLoading: isCareerLoading, recallScout, fireScout, hireScout,
         squad,
+        availableScouts
     } = useCareer();
 
     const [playerToEdit, setPlayerToEdit] = useState<ListedPlayer | null>(null);
@@ -642,6 +643,8 @@ export default function TransfersPage() {
                 isOpen={isHireScoutModalOpen}
                 onOpenChange={setIsHireScoutModalOpen}
                 onHire={handleHireScout}
+                availableScouts={availableScouts}
+                currentScoutCount={availableScouts.length}
             />
 
             <MakeOfferModal
